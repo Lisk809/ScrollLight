@@ -132,15 +132,15 @@ object ToolDefinitions {
 
     private val clearOverlay = tool(
         name = CLEAR_OVERLAY,
-        description = "清除所有AI添加的高亮、注解、交叉参考等标注，恢复原始状态。",
-        properties = JsonObject(),
+        description = "清除所有AI添加的高亮、注解、交叉参考等标注，恢复原始状态。无需参数。",
+        properties = JsonObject().apply { addProperty("_dummy", "unused") },
         required = emptyList()
     )
 
     private val getCurrentReading = tool(
         name = GET_CURRENT_READING,
-        description = "获取用户当前正在阅读的书卷、章节信息，以便提供更精准的上下文解答。",
-        properties = JsonObject(),
+        description = "获取用户当前正在阅读的书卷、章节信息，以便提供更精准的上下文解答。无需参数。",
+        properties = JsonObject().apply { addProperty("_dummy", "unused") },
         required = emptyList()
     )
 }
