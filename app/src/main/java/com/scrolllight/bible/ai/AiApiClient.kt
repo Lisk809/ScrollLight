@@ -4,10 +4,12 @@ import com.google.gson.Gson
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.withContext
 import okhttp3.*
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -15,8 +17,6 @@ import okhttp3.sse.EventSource
 import okhttp3.sse.EventSourceListener
 import okhttp3.sse.EventSources
 import java.io.IOException
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -24,12 +24,12 @@ import javax.inject.Singleton
 // ── Sealed result types ───────────────────────────────────────────────────────
 
 sealed class StreamChunk {
-    data class Token(val text: String)                     : StreamChunk()
-    data class ToolCallStart(val call: ToolCall)           : StreamChunk()
+    data class Token(val text: String)                         : StreamChunk()
+    data class ToolCallStart(val call: ToolCall)               : StreamChunk()
     data class ToolCallDelta(val id: String, val argDelta: String) : StreamChunk()
-    data class ToolCallComplete(val calls: List<ToolCall>) : StreamChunk()
-    data class Done(val finishReason: String)              : StreamChunk()
-    data class Error(val message: String)                  : StreamChunk()
+    data class ToolCallComplete(val calls: List<ToolCall>)     : StreamChunk()
+    data class Done(val finishReason: String)                  : StreamChunk()
+    data class Error(val message: String, val detail: String = "") : StreamChunk()
 }
 
 // ── OpenAI-compatible message builder ────────────────────────────────────────
@@ -81,36 +81,57 @@ class AiApiClient @Inject constructor(private val gson: Gson) {
         .writeTimeout(30, TimeUnit.SECONDS)
         .build()
 
-    private val JSON = "application/json; charset=utf-8".toMediaType()
+    private val JSON_MEDIA = "application/json; charset=utf-8".toMediaType()
 
     // ── Build request body ────────────────────────────────────────────────
 
     private fun buildBody(
         config: AiConfig,
         messages: JsonArray,
-        stream: Boolean,
-        withTools: Boolean = true
+        stream: Boolean
     ): String = JsonObject().apply {
         addProperty("model", config.model)
         add("messages", messages)
         addProperty("max_tokens", config.maxTokens)
         addProperty("temperature", config.temperature.toDouble())
         addProperty("stream", stream)
-        if (withTools) {
+        // Only include tools if explicitly enabled in config
+        if (config.toolCallingEnabled) {
             add("tools", ToolDefinitions.all)
-            addProperty("tool_choice", "auto")
+            // Use object form for tool_choice — more widely compatible than string "auto"
+            // Alibaba Bailian, DeepSeek etc. accept this form
+            add("tool_choice", JsonObject().apply {
+                addProperty("type", "auto")
+            })
         }
     }.toString()
+
+    // ── Parse error body for readable message ─────────────────────────────
+
+    private fun parseErrorBody(body: String?, httpCode: Int): String {
+        if (body.isNullOrBlank()) return "HTTP $httpCode"
+        return try {
+            val json = JsonParser.parseString(body).asJsonObject
+            // OpenAI / compatible format: {"error": {"message": "..."}}
+            val msg = json.getAsJsonObject("error")?.get("message")?.asString
+                ?: json.get("message")?.asString
+                ?: json.get("msg")?.asString
+                ?: body.take(300)
+            "HTTP $httpCode: $msg"
+        } catch (_: Exception) {
+            "HTTP $httpCode: ${body.take(300)}"
+        }
+    }
 
     // ── Streaming chat (SSE) ──────────────────────────────────────────────
 
     fun streamChat(config: AiConfig, messages: JsonArray): Flow<StreamChunk> = callbackFlow {
-        val body = buildBody(config, messages, stream = true)
+        val body    = buildBody(config, messages, stream = true)
         val request = Request.Builder()
             .url(config.chatEndpoint)
             .addHeader("Authorization", "Bearer ${config.apiKey}")
             .addHeader("Accept", "text/event-stream")
-            .post(body.toRequestBody(JSON))
+            .post(body.toRequestBody(JSON_MEDIA))
             .build()
 
         val toolCallBuffers = mutableMapOf<Int, Triple<String, String, StringBuilder>>()
@@ -146,12 +167,11 @@ class AiApiClient @Inject constructor(private val gson: Gson) {
                         val tcId  = tc.get("id")?.takeIf { !it.isJsonNull }?.asString
                         val fn    = tc.getAsJsonObject("function")
                         val name  = fn?.get("name")?.takeIf { !it.isJsonNull }?.asString
-                        val argsDelta = fn?.get("arguments")?.takeIf { !it.isJsonNull }?.asString ?: ""
-
+                        val argDelta = fn?.get("arguments")?.takeIf { !it.isJsonNull }?.asString ?: ""
                         if (tcId != null && name != null) {
-                            toolCallBuffers[idx] = Triple(tcId, name, StringBuilder(argsDelta))
+                            toolCallBuffers[idx] = Triple(tcId, name, StringBuilder(argDelta))
                         } else {
-                            toolCallBuffers[idx]?.third?.append(argsDelta)
+                            toolCallBuffers[idx]?.third?.append(argDelta)
                         }
                     }
 
@@ -169,8 +189,11 @@ class AiApiClient @Inject constructor(private val gson: Gson) {
             }
 
             override fun onFailure(eventSource: EventSource, t: Throwable?, response: Response?) {
-                val msg = t?.message ?: response?.let { "HTTP ${it.code}: ${it.message}" } ?: "未知错误"
-                trySend(StreamChunk.Error(msg))
+                val detail = response?.let {
+                    val body = it.body?.string() ?: ""
+                    parseErrorBody(body, it.code)
+                } ?: t?.message ?: "连接失败"
+                trySend(StreamChunk.Error(detail))
                 close()
             }
 
@@ -183,20 +206,23 @@ class AiApiClient @Inject constructor(private val gson: Gson) {
     // ── Non-streaming chat ────────────────────────────────────────────────
 
     fun chat(config: AiConfig, messages: JsonArray): Flow<StreamChunk> = flow {
-        val body = buildBody(config, messages, stream = false)
+        val body    = buildBody(config, messages, stream = false)
         val request = Request.Builder()
             .url(config.chatEndpoint)
             .addHeader("Authorization", "Bearer ${config.apiKey}")
-            .post(body.toRequestBody(JSON))
+            .post(body.toRequestBody(JSON_MEDIA))
             .build()
 
         try {
             val response = withContext(Dispatchers.IO) { client.newCall(request).execute() }
+            val bodyStr  = withContext(Dispatchers.IO) { response.body?.string() ?: "{}" }
+
             if (!response.isSuccessful) {
-                emit(StreamChunk.Error("HTTP ${response.code}: ${response.message}"))
+                emit(StreamChunk.Error(parseErrorBody(bodyStr, response.code)))
                 return@flow
             }
-            val json    = JsonParser.parseString(response.body?.string() ?: "{}").asJsonObject
+
+            val json    = JsonParser.parseString(bodyStr).asJsonObject
             val choice  = json.getAsJsonArray("choices")?.get(0)?.asJsonObject
             val message = choice?.getAsJsonObject("message")
             val finish  = choice?.get("finish_reason")?.asString ?: "stop"
@@ -217,7 +243,6 @@ class AiApiClient @Inject constructor(private val gson: Gson) {
                 }
                 emit(StreamChunk.ToolCallComplete(calls))
             }
-
             emit(StreamChunk.Done(finish))
         } catch (e: IOException) {
             emit(StreamChunk.Error("网络错误: ${e.message}"))
@@ -233,31 +258,35 @@ class AiApiClient @Inject constructor(private val gson: Gson) {
 
     suspend fun fetchModels(config: AiConfig): Result<List<ModelInfo>> =
         withContext(Dispatchers.IO) {
-        val request = Request.Builder()
-            .url(config.baseUrl.trimEnd('/') + "/models")
-            .addHeader("Authorization", "Bearer ${config.apiKey}")
-            .get()
-            .build()
-        try {
-            val response = client.newCall(request).execute()
-            if (!response.isSuccessful) {
-                return@withContext Result.failure(Exception("HTTP ${response.code}: ${response.message}"))
-            }
-            val json = JsonParser.parseString(response.body?.string() ?: "{}").asJsonObject
-            val data = json.getAsJsonArray("data") ?: return@withContext Result.success(emptyList())
-            val models = data.mapNotNull { elem ->
-                try {
-                    val obj = elem.asJsonObject
-                    ModelInfo(
-                        id      = obj.get("id")?.asString ?: return@mapNotNull null,
-                        owned   = obj.get("owned_by")?.asString ?: "",
-                        created = obj.get("created")?.asLong ?: 0L
+            val request = Request.Builder()
+                .url(config.baseUrl.trimEnd('/') + "/models")
+                .addHeader("Authorization", "Bearer ${config.apiKey}")
+                .get()
+                .build()
+            try {
+                val response = client.newCall(request).execute()
+                val bodyStr  = response.body?.string() ?: "{}"
+                if (!response.isSuccessful) {
+                    return@withContext Result.failure(
+                        Exception(parseErrorBody(bodyStr, response.code))
                     )
-                } catch (_: Exception) { null }
-            }.sortedBy { it.id }
-            Result.success(models)
-        } catch (e: IOException) {
-            Result.failure(e)
+                }
+                val json = JsonParser.parseString(bodyStr).asJsonObject
+                val data = json.getAsJsonArray("data")
+                    ?: return@withContext Result.success(emptyList())
+                val models = data.mapNotNull { elem ->
+                    try {
+                        val obj = elem.asJsonObject
+                        ModelInfo(
+                            id      = obj.get("id")?.asString ?: return@mapNotNull null,
+                            owned   = obj.get("owned_by")?.asString ?: "",
+                            created = obj.get("created")?.asLong ?: 0L
+                        )
+                    } catch (_: Exception) { null }
+                }.sortedBy { it.id }
+                Result.success(models)
+            } catch (e: IOException) {
+                Result.failure(e)
+            }
         }
-    }  // withContext
 }

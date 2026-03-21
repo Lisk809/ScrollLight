@@ -40,6 +40,7 @@ class AiSettingsViewModel @Inject constructor(
     fun setMaxTokens(v: Int)        = _state.update { it.copy(draft = it.draft.copy(maxTokens = v)) }
     fun setTemperature(v: Float)    = _state.update { it.copy(draft = it.draft.copy(temperature = v)) }
     fun setStream(v: Boolean)       = _state.update { it.copy(draft = it.draft.copy(streamEnabled = v)) }
+    fun setToolCalling(v: Boolean)  = _state.update { it.copy(draft = it.draft.copy(toolCallingEnabled = v)) }
     fun setSystemPrompt(p: String)  = _state.update { it.copy(draft = it.draft.copy(systemPrompt = p)) }
     fun resetSystemPrompt()         = _state.update { it.copy(draft = it.draft.copy(systemPrompt = DEFAULT_SYSTEM_PROMPT)) }
 

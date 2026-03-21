@@ -25,7 +25,8 @@ data class AiConfig(
     val systemPrompt: String = DEFAULT_SYSTEM_PROMPT,
     val maxTokens: Int   = 2048,
     val temperature: Float = 0.7f,
-    val streamEnabled: Boolean = true
+    val streamEnabled: Boolean = true,
+    val toolCallingEnabled: Boolean = true   // disable for APIs that don't support tools
 ) {
     val isConfigured: Boolean get() = apiKey.isNotBlank() && baseUrl.isNotBlank()
     val chatEndpoint: String  get() = baseUrl.trimEnd('/') + "/chat/completions"
@@ -56,6 +57,7 @@ object AiConfigKeys {
     val MAX_TOKENS    = stringPreferencesKey("ai_max_tokens")
     val TEMPERATURE   = stringPreferencesKey("ai_temperature")
     val STREAM        = stringPreferencesKey("ai_stream")
+    val TOOL_CALLING  = stringPreferencesKey("ai_tool_calling")
 }
 
 // ── Repository ────────────────────────────────────────────────────────────────
@@ -72,7 +74,8 @@ class AiConfigRepository @Inject constructor(
             systemPrompt = prefs[AiConfigKeys.SYSTEM_PROMPT] ?: DEFAULT_SYSTEM_PROMPT,
             maxTokens    = prefs[AiConfigKeys.MAX_TOKENS]?.toIntOrNull() ?: 2048,
             temperature  = prefs[AiConfigKeys.TEMPERATURE]?.toFloatOrNull() ?: 0.7f,
-            streamEnabled = prefs[AiConfigKeys.STREAM]?.toBooleanStrictOrNull() ?: true
+            streamEnabled        = prefs[AiConfigKeys.STREAM]?.toBooleanStrictOrNull() ?: true,
+            toolCallingEnabled   = prefs[AiConfigKeys.TOOL_CALLING]?.toBooleanStrictOrNull() ?: true
         )
     }
 
@@ -85,6 +88,7 @@ class AiConfigRepository @Inject constructor(
             prefs[AiConfigKeys.MAX_TOKENS]    = config.maxTokens.toString()
             prefs[AiConfigKeys.TEMPERATURE]   = config.temperature.toString()
             prefs[AiConfigKeys.STREAM]        = config.streamEnabled.toString()
+            prefs[AiConfigKeys.TOOL_CALLING]  = config.toolCallingEnabled.toString()
         }
     }
 

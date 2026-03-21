@@ -255,6 +255,40 @@ fun AiSettingsScreen(
                 }
             }
 
+            // ── Tool Calling toggle ──────────────────────────────────────────
+            Surface(shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.surface, tonalElevation = 1.dp) {
+                Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("工具调用 (Tool Calling)", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                            Text("让AI直接操控阅读界面（高亮、跳转等）", style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Switch(checked = draft.toolCallingEnabled, onCheckedChange = { vm.setToolCalling(it) })
+                    }
+                    AnimatedVisibility(visible = !draft.toolCallingEnabled) {
+                        Surface(
+                            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                            shape = RoundedCornerShape(8.dp),
+                            color = MaterialTheme.colorScheme.tertiaryContainer.copy(0.5f)
+                        ) {
+                            Row(modifier = Modifier.padding(10.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Icon(Icons.Outlined.Info, null, modifier = Modifier.size(14.dp),
+                                    tint = MaterialTheme.colorScheme.tertiary)
+                                Text("关闭后AI只能对话，不能操控界面。
+建议：阿里百炼/部分模型如遇400错误，先关闭此项再试。",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onTertiaryContainer)
+                            }
+                        }
+                    }
+                }
+            }
+
             // ── Advanced ──────────────────────────────────────────────────
             TextButton(
                 onClick  = { showAdvanced = !showAdvanced },
