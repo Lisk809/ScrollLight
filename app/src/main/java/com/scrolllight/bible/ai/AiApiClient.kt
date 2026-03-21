@@ -231,3 +231,37 @@ class AiApiClient @Inject constructor(private val gson: Gson) {
     fun send(config: AiConfig, messages: JsonArray): Flow<StreamChunk> =
         if (config.streamEnabled) streamChat(config, messages) else chat(config, messages)
 }
+
+    // ── Fetch available models ────────────────────────────────────────────
+
+    suspend fun fetchModels(config: AiConfig): Result<List<ModelInfo>> {
+        val request = Request.Builder()
+            .url(config.baseUrl.trimEnd('/') + "/models")
+            .addHeader("Authorization", "Bearer ${config.apiKey}")
+            .get()
+            .build()
+        return try {
+            val response = client.newCall(request).execute()
+            if (!response.isSuccessful) {
+                return Result.failure(Exception("HTTP ${response.code}: ${response.message}"))
+            }
+            val json = JsonParser.parseString(response.body?.string() ?: "{}").asJsonObject
+            val data = json.getAsJsonArray("data") ?: return Result.success(emptyList())
+            val models = data.mapNotNull { elem ->
+                try {
+                    val obj = elem.asJsonObject
+                    ModelInfo(
+                        id      = obj.get("id")?.asString ?: return@mapNotNull null,
+                        owned   = obj.get("owned_by")?.asString ?: "",
+                        created = obj.get("created")?.asLong ?: 0L
+                    )
+                } catch (_: Exception) { null }
+            }.sortedBy { it.id }
+            Result.success(models)
+        } catch (e: IOException) {
+            Result.failure(e)
+        }
+    }
+}
+
+data class ModelInfo(val id: String, val owned: String, val created: Long)

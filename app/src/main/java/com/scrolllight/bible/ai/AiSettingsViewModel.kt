@@ -7,37 +7,67 @@ import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-// ── ViewModel ─────────────────────────────────────────────────────────────────
+data class AiSettingsUiState(
+    val draft: AiConfig = AiConfig(),
+    val isSaved: Boolean = false,
+    val models: List<ModelInfo> = emptyList(),
+    val isLoadingModels: Boolean = false,
+    val modelError: String? = null
+)
 
 @HiltViewModel
 class AiSettingsViewModel @Inject constructor(
-    private val repo: AiConfigRepository
+    private val repo: AiConfigRepository,
+    private val apiClient: AiApiClient
 ) : ViewModel() {
 
-    // Editable draft state
-    private val _draft = MutableStateFlow(AiConfig())
-    val draft: StateFlow<AiConfig> = _draft.asStateFlow()
+    private val _state = MutableStateFlow(AiSettingsUiState())
+    val state: StateFlow<AiSettingsUiState> = _state.asStateFlow()
 
-    val isSaved = MutableStateFlow(false)
+    val draft: StateFlow<AiConfig> get() = _state.map { it.draft }.stateIn(
+        viewModelScope, SharingStarted.Eagerly, AiConfig()
+    )
 
     init {
         viewModelScope.launch {
-            repo.config.first().let { _draft.value = it }
+            repo.config.first().let { _state.update { s -> s.copy(draft = it) } }
         }
     }
 
-    fun setBaseUrl(url: String)       = _draft.update { it.copy(baseUrl = url) }
-    fun setApiKey(key: String)        = _draft.update { it.copy(apiKey = key) }
-    fun setModel(model: String)       = _draft.update { it.copy(model = model) }
-    fun setMaxTokens(v: Int)          = _draft.update { it.copy(maxTokens = v) }
-    fun setTemperature(v: Float)      = _draft.update { it.copy(temperature = v) }
-    fun setStream(v: Boolean)         = _draft.update { it.copy(streamEnabled = v) }
-    fun setSystemPrompt(p: String)    = _draft.update { it.copy(systemPrompt = p) }
+    fun setBaseUrl(url: String)     = _state.update { it.copy(draft = it.draft.copy(baseUrl = url)) }
+    fun setApiKey(key: String)      = _state.update { it.copy(draft = it.draft.copy(apiKey = key)) }
+    fun setModel(model: String)     = _state.update { it.copy(draft = it.draft.copy(model = model)) }
+    fun setMaxTokens(v: Int)        = _state.update { it.copy(draft = it.draft.copy(maxTokens = v)) }
+    fun setTemperature(v: Float)    = _state.update { it.copy(draft = it.draft.copy(temperature = v)) }
+    fun setStream(v: Boolean)       = _state.update { it.copy(draft = it.draft.copy(streamEnabled = v)) }
+    fun setSystemPrompt(p: String)  = _state.update { it.copy(draft = it.draft.copy(systemPrompt = p)) }
+    fun resetSystemPrompt()         = _state.update { it.copy(draft = it.draft.copy(systemPrompt = DEFAULT_SYSTEM_PROMPT)) }
 
     fun save() = viewModelScope.launch {
-        repo.save(_draft.value)
-        isSaved.value = true
+        repo.save(_state.value.draft)
+        _state.update { it.copy(isSaved = true) }
     }
 
-    fun resetSystemPrompt() = _draft.update { it.copy(systemPrompt = DEFAULT_SYSTEM_PROMPT) }
+    fun resetSaved() = _state.update { it.copy(isSaved = false) }
+
+    fun fetchModels() {
+        val cfg = _state.value.draft
+        if (!cfg.isConfigured) {
+            _state.update { it.copy(modelError = "请先填写 Base URL 和 API Key") }
+            return
+        }
+        _state.update { it.copy(isLoadingModels = true, modelError = null) }
+        viewModelScope.launch {
+            apiClient.fetchModels(cfg).fold(
+                onSuccess = { models ->
+                    _state.update { it.copy(models = models, isLoadingModels = false) }
+                },
+                onFailure = { err ->
+                    _state.update { it.copy(isLoadingModels = false, modelError = err.message ?: "获取失败") }
+                }
+            )
+        }
+    }
+
+    fun clearModelError() = _state.update { it.copy(modelError = null) }
 }
