@@ -1,0 +1,55 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Open book shape -->
+    <path
+        android:fillColor="#B45309"
+        android:pathData="M54,24 C42,24 32,31 32,40 L32,80 C32,82 34,84 36,84 L52,84 L52,24 Z"/>
+    <path
+        android:fillColor="#92400E"
+        android:pathData="M54,24 C66,24 76,31 76,40 L76,80 C76,82 74,84 72,84 L56,84 L56,24 Z"/>
+    <!-- Spine -->
+    <path
+        android:fillColor="#78350F"
+        android:pathData="M52,22 C52,20 53,19 54,19 C55,19 56,20 56,22 L56,86 C56,88 55,89 54,89 C53,89 52,88 52,86 Z"/>
+    <!-- Left page lines -->
+    <path
+        android:strokeColor="#FEF3C7"
+        android:strokeWidth="2"
+        android:pathData="M36,44 L50,44"/>
+    <path
+        android:strokeColor="#FEF3C7"
+        android:strokeWidth="2"
+        android:pathData="M36,52 L50,52"/>
+    <path
+        android:strokeColor="#FEF3C7"
+        android:strokeWidth="2"
+        android:pathData="M36,60 L50,60"/>
+    <path
+        android:strokeColor="#FEF3C7"
+        android:strokeWidth="2"
+        android:pathData="M36,68 L50,68"/>
+    <!-- Right page lines -->
+    <path
+        android:strokeColor="#FDE68A"
+        android:strokeWidth="2"
+        android:pathData="M58,44 L72,44"/>
+    <path
+        android:strokeColor="#FDE68A"
+        android:strokeWidth="2"
+        android:pathData="M58,52 L72,52"/>
+    <path
+        android:strokeColor="#FDE68A"
+        android:strokeWidth="2"
+        android:pathData="M58,60 L72,60"/>
+    <path
+        android:strokeColor="#FDE68A"
+        android:strokeWidth="2"
+        android:pathData="M58,68 L72,68"/>
+    <!-- Light ray / star accent -->
+    <path
+        android:fillColor="#FCD34D"
+        android:pathData="M54,14 L55.5,19 L54,18 L52.5,19 Z"/>
+</vector>

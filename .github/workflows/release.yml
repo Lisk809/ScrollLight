@@ -1,0 +1,222 @@
+name: 🚀 Release Build (稳定版)
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'   # e.g. v1.2.3
+  workflow_dispatch:
+    inputs:
+      version_name:
+        description: 'Version name (e.g. 1.2.3)'
+        required: true
+        default: '1.0.0'
+      release_notes:
+        description: 'Release notes (Chinese OK)'
+        required: false
+        default: '修复已知问题，优化性能。'
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false       # Never cancel a release build
+
+jobs:
+  # ─── Full test suite ───────────────────────────────────────────────────────
+  test:
+    name: Full Test Suite
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: gradle
+
+      - name: Grant execute permission
+        run: chmod +x gradlew
+        
+      - name: Wrapper
+        run: ./gradle wrapper --gradle-version 8.11.1
+
+      - name: Run lint (strict)
+        run: ./gradlew lint --stacktrace
+
+      - name: Run unit tests
+        run: ./gradlew testReleaseUnitTest --stacktrace
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-test-results
+          path: app/build/reports/
+
+  # ─── Build signed release APK + AAB ──────────────────────────────────────
+  build-release:
+    name: Build & Sign Release
+    runs-on: ubuntu-latest
+    needs: test
+    outputs:
+      version_name: ${{ steps.version.outputs.version_name }}
+      version_code: ${{ steps.version.outputs.version_code }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: gradle
+
+      - name: Grant execute permission
+        run: chmod +x gradlew
+
+      # ── Resolve version ────────────────────────────────────────────────
+      - name: Resolve version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            VER="${GITHUB_REF#refs/tags/v}"
+          else
+            VER="${{ inputs.version_name }}"
+          fi
+          CODE=$(echo $VER | awk -F. '{ printf "%d%02d%02d", $1, $2, $3 }')
+          echo "version_name=$VER" >> $GITHUB_OUTPUT
+          echo "version_code=$CODE" >> $GITHUB_OUTPUT
+          echo "Building version $VER (code $CODE)"
+
+      # ── Decode keystore from secret ───────────────────────────────────
+      - name: Decode keystore
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > $RUNNER_TEMP/release.jks
+
+      # ── Build signed APK ──────────────────────────────────────────────
+      - name: Build release APK
+        env:
+          KEYSTORE_PATH:     ${{ runner.temp }}/release.jks
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS:         ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD:      ${{ secrets.KEY_PASSWORD }}
+        run: |
+          ./gradlew assembleRelease \
+            -Pandroid.versionName=${{ steps.version.outputs.version_name }} \
+            -Pandroid.versionCode=${{ steps.version.outputs.version_code }} \
+            --stacktrace
+
+      # ── Build signed AAB (for Play Store) ────────────────────────────
+      - name: Build release AAB
+        env:
+          KEYSTORE_PATH:     ${{ runner.temp }}/release.jks
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS:         ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD:      ${{ secrets.KEY_PASSWORD }}
+        run: |
+          ./gradlew bundleRelease \
+            -Pandroid.versionName=${{ steps.version.outputs.version_name }} \
+            -Pandroid.versionCode=${{ steps.version.outputs.version_code }} \
+            --stacktrace
+
+      # ── Rename artifacts ──────────────────────────────────────────────
+      - name: Rename artifacts
+        run: |
+          VER=${{ steps.version.outputs.version_name }}
+          cp app/build/outputs/apk/release/app-release.apk \
+             app/build/outputs/apk/release/ScrollLight-v${VER}.apk
+          cp app/build/outputs/bundle/release/app-release.aab \
+             app/build/outputs/bundle/release/ScrollLight-v${VER}.aab
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ScrollLight-Release-APK
+          path: app/build/outputs/apk/release/ScrollLight-*.apk
+
+      - name: Upload AAB artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ScrollLight-Release-AAB
+          path: app/build/outputs/bundle/release/ScrollLight-*.aab
+
+  # ─── Create GitHub Release ────────────────────────────────────────────────
+  github-release:
+    name: GitHub Release
+    runs-on: ubuntu-latest
+    needs: build-release
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download APK
+        uses: actions/download-artifact@v4
+        with:
+          name: ScrollLight-Release-APK
+          path: dist/
+
+      - name: Download AAB
+        uses: actions/download-artifact@v4
+        with:
+          name: ScrollLight-Release-AAB
+          path: dist/
+
+      - name: Resolve release notes
+        id: notes
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            NOTES="${{ inputs.release_notes }}"
+          else
+            # Extract from CHANGELOG.md between this tag and the previous one
+            NOTES=$(sed -n "/^## \[${{ needs.build-release.outputs.version_name }}\]/,/^## \[/p" CHANGELOG.md | head -n -1 || echo "查看 Commits 了解本次更新内容。")
+          fi
+          echo "notes<<EOF" >> $GITHUB_OUTPUT
+          echo "$NOTES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name:   v${{ needs.build-release.outputs.version_name }}
+          name:       光言圣经 v${{ needs.build-release.outputs.version_name }}
+          body: |
+            ## 🕊️ 光言圣经 v${{ needs.build-release.outputs.version_name }}
+
+            ${{ steps.notes.outputs.notes }}
+
+            ---
+            ### 📦 下载
+            | 文件 | 说明 |
+            |---|---|
+            | `ScrollLight-v*.apk` | 直接安装（需开启未知来源） |
+            | `ScrollLight-v*.aab` | Google Play 上架包 |
+
+            ### 📋 安装方法
+            1. 下载 APK 文件
+            2. 在 Android 设置中允许"安装未知来源应用"
+            3. 打开下载的 APK 文件安装
+
+            > **最低要求**：Android 8.0 (API 26) 及以上
+          files: dist/*
+          draft: false
+          prerelease: false
+          generate_release_notes: false
+
+  # ─── (Optional) Upload to Play Store ─────────────────────────────────────
+  # Uncomment when you have a Play Store service account
+  # play-store:
+  #   name: Upload to Play Store
+  #   runs-on: ubuntu-latest
+  #   needs: build-release
+  #   steps:
+  #     - uses: actions/download-artifact@v4
+  #       with:
+  #         name: ScrollLight-Release-AAB
+  #         path: dist/
+  #     - uses: r0adkll/upload-google-play@v1
+  #       with:
+  #         serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+  #         packageName: com.scrolllight.bible
+  #         releaseFiles: dist/*.aab
+  #         track: production

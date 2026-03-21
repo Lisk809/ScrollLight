@@ -1,0 +1,22 @@
+*.iml
+.gradle
+/local.properties
+/.idea
+.DS_Store
+/build
+/captures
+.externalNativeBuild
+.cxx
+local.properties
+
+# Keystore (never commit)
+*.jks
+*.keystore
+keystore.properties
+
+# Android
+app/release/
+app/build/
+
+# Kotlin
+kotlin-build/

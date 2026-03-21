@@ -1,0 +1,18 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Open scroll/book icon -->
+    <path
+        android:fillColor="#B45309"
+        android:pathData="M54,18 C38,18 26,28 26,42 L26,78 C26,80 28,82 30,82 L78,82 C80,82 82,80 82,78 L82,42 C82,28 70,18 54,18Z" />
+    <path
+        android:fillColor="#FEF3C7"
+        android:pathData="M54,22 L54,78 M34,36 L52,36 M34,44 L52,44 M34,52 L52,52 M34,60 L52,60 M56,36 L74,36 M56,44 L74,44 M56,52 L74,52 M56,60 L74,60"
+        android:strokeColor="#B45309"
+        android:strokeWidth="2.5" />
+    <path
+        android:fillColor="#92400E"
+        android:pathData="M54,16 C52,16 50,17 50,19 L50,83 C50,85 52,86 54,86 C56,86 58,85 58,83 L58,19 C58,17 56,16 54,16Z" />
+</vector>

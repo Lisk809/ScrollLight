@@ -1,0 +1,32 @@
+<resources>
+    <string name="app_name">光言圣经</string>
+    <string name="tab_bible">读经</string>
+    <string name="tab_plans">计划</string>
+    <string name="tab_explore">探索</string>
+    <string name="tab_profile">我的</string>
+    <string name="daily_verse">每日经文</string>
+    <string name="bible_contents">圣经目录</string>
+    <string name="search_scripture">搜索经文</string>
+    <string name="read_bible">阅读圣经</string>
+    <string name="audio_bible">有声圣经</string>
+    <string name="daily_bread">每日灵粮</string>
+    <string name="bible_commentary">圣经注释</string>
+    <string name="bible_dictionary">圣经辞典</string>
+    <string name="original_text">圣经原文</string>
+    <string name="download_content">下载内容</string>
+    <string name="old_testament">旧约</string>
+    <string name="new_testament">新约</string>
+    <string name="search_hint">搜索经文…</string>
+    <string name="my_notes">我的笔记</string>
+    <string name="my_highlights">我的高亮</string>
+    <string name="my_bookmarks">我的收藏</string>
+    <string name="settings">设置</string>
+    <string name="language">语言</string>
+    <string name="version">版本</string>
+    <string name="cuv">和合本</string>
+    <string name="niv">NIV</string>
+    <string name="reading_plan">读经计划</string>
+    <string name="all_plans">所有计划</string>
+    <string name="my_plans">我的计划</string>
+    <string name="completed_plans">已完成</string>
+</resources>
