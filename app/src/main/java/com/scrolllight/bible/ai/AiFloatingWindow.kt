@@ -258,7 +258,8 @@ private fun AiChatPanel(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .fillMaxHeight(fraction = 0.78f)
+            .fillMaxHeight(fraction = 0.82f)
+            .navigationBarsPadding()    // account for system nav bar
             .glassBackground(
                 shape      = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
                 glassColor = baseColor,
@@ -268,7 +269,7 @@ private fun AiChatPanel(
                 spotColor  = colors.primary.copy(alpha = 0.06f)
             )
     ) {
-        Column(modifier = Modifier.fillMaxSize()) {
+        Column(modifier = Modifier.fillMaxSize().imePadding()) {
 
             // ── Header ────────────────────────────────────────────────────
             Box(
@@ -401,7 +402,6 @@ private fun AiChatPanel(
             Row(
                 modifier              = Modifier
                     .fillMaxWidth()
-                    .imePadding()
                     .padding(horizontal = 12.dp, vertical = 10.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment     = Alignment.CenterVertically

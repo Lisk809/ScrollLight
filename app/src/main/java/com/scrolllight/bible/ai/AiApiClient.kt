@@ -15,6 +15,8 @@ import okhttp3.sse.EventSource
 import okhttp3.sse.EventSourceListener
 import okhttp3.sse.EventSources
 import java.io.IOException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -189,7 +191,7 @@ class AiApiClient @Inject constructor(private val gson: Gson) {
             .build()
 
         try {
-            val response = client.newCall(request).execute()
+            val response = withContext(Dispatchers.IO) { client.newCall(request).execute() }
             if (!response.isSuccessful) {
                 emit(StreamChunk.Error("HTTP ${response.code}: ${response.message}"))
                 return@flow
@@ -229,19 +231,20 @@ class AiApiClient @Inject constructor(private val gson: Gson) {
 
     // ── Fetch available models ────────────────────────────────────────────
 
-    suspend fun fetchModels(config: AiConfig): Result<List<ModelInfo>> {
+    suspend fun fetchModels(config: AiConfig): Result<List<ModelInfo>> =
+        withContext(Dispatchers.IO) {
         val request = Request.Builder()
             .url(config.baseUrl.trimEnd('/') + "/models")
             .addHeader("Authorization", "Bearer ${config.apiKey}")
             .get()
             .build()
-        return try {
+        try {
             val response = client.newCall(request).execute()
             if (!response.isSuccessful) {
-                return Result.failure(Exception("HTTP ${response.code}: ${response.message}"))
+                return@withContext Result.failure(Exception("HTTP ${response.code}: ${response.message}"))
             }
             val json = JsonParser.parseString(response.body?.string() ?: "{}").asJsonObject
-            val data = json.getAsJsonArray("data") ?: return Result.success(emptyList())
+            val data = json.getAsJsonArray("data") ?: return@withContext Result.success(emptyList())
             val models = data.mapNotNull { elem ->
                 try {
                     val obj = elem.asJsonObject
@@ -256,5 +259,5 @@ class AiApiClient @Inject constructor(private val gson: Gson) {
         } catch (e: IOException) {
             Result.failure(e)
         }
-    }
+    }  // withContext
 }

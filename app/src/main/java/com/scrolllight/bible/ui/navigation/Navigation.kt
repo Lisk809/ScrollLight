@@ -29,6 +29,8 @@ import com.scrolllight.bible.ui.reading.ReadingViewModel
 import com.scrolllight.bible.ui.search.SearchScreen
 import com.scrolllight.bible.ui.theme.glassBackground
 
+// ── Routes ────────────────────────────────────────────────────────────────────
+
 sealed class Screen(val route: String) {
     object Home         : Screen("home")
     object Plans        : Screen("plans")
@@ -37,10 +39,10 @@ sealed class Screen(val route: String) {
     object BookContents : Screen("book_contents")
     object AiSettings   : Screen("ai_settings")
     object Reading      : Screen("reading/{bookId}/{chapter}") {
-        fun createRoute(bookId: String, chapter: Int) = "reading/$bookId/$chapter"
+        fun createRoute(b: String, c: Int) = "reading/$b/$c"
     }
     object Search       : Screen("search?query={query}") {
-        fun createRoute(query: String = "") = "search?query=$query"
+        fun createRoute(q: String = "") = "search?query=$q"
     }
 }
 
@@ -55,65 +57,87 @@ val bottomNavItems = listOf(
     BottomNavItem(Screen.Explore, "探索",  Icons.Filled.Explore,       Icons.Outlined.Explore),
     BottomNavItem(Screen.Profile, "我的",  Icons.Filled.Person,        Icons.Outlined.Person),
 )
-val bottomNavRoutes = setOf(Screen.Home.route, Screen.Plans.route, Screen.Explore.route, Screen.Profile.route)
+val bottomNavRoutes = setOf(
+    Screen.Home.route, Screen.Plans.route, Screen.Explore.route, Screen.Profile.route
+)
+
+// ── Main NavHost ──────────────────────────────────────────────────────────────
 
 @Composable
 fun ScrollLightNavHost() {
-    val navController = rememberNavController()
-    val navBackStack  by navController.currentBackStackEntryAsState()
-    val currentRoute  = navBackStack?.destination?.route?.substringBefore("?")?.substringBefore("/")
-    val showBottomBar = bottomNavRoutes.any { it == currentRoute }
-    val hideFloating  = currentRoute == Screen.AiSettings.route
+    val navController  = rememberNavController()
+    val navBackStack   by navController.currentBackStackEntryAsState()
+    val currentRoute   = navBackStack?.destination?.route
+        ?.substringBefore("?")?.substringBefore("/")
+    val showBottomBar  = bottomNavRoutes.any { it == currentRoute }
+    val hideFloating   = currentRoute == Screen.AiSettings.route
 
     val aiChatVm: AiChatViewModel = hiltViewModel()
     var readingCtx by remember { mutableStateOf(AiReadingContext("", "", 0)) }
 
     val colors = MaterialTheme.colorScheme
     val isDark  = colors.background.luminance() < 0.15f
-    val navBg   = if (isDark) colors.surfaceVariant.copy(0.85f) else Color.White.copy(0.82f)
 
-    Scaffold(
-        containerColor = Color.Transparent,
-        bottomBar = {
-            if (showBottomBar) {
-                NavigationBar(
-                    containerColor = navBg,
-                    tonalElevation = 0.dp,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
-                        .background(navBg, RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
-                ) {
-                    bottomNavItems.forEach { item ->
-                        val selected = currentRoute == item.screen.route
-                        NavigationBarItem(
-                            selected = selected,
-                            onClick  = {
-                                navController.navigate(item.screen.route) {
-                                    popUpTo(navController.graph.findStartDestination().id) { saveState = true }
-                                    launchSingleTop = true; restoreState = true
-                                }
-                            },
-                            icon  = { Icon(if (selected) item.selectedIcon else item.unselectedIcon, item.label) },
-                            label = { Text(item.label) },
-                            colors = NavigationBarItemDefaults.colors(
-                                selectedIconColor   = colors.primary,
-                                selectedTextColor   = colors.primary,
-                                indicatorColor      = colors.primary.copy(alpha = 0.12f),
-                                unselectedIconColor = colors.onSurfaceVariant,
-                                unselectedTextColor = colors.onSurfaceVariant
+    // ── Key fix: AiFloatingWindowHost wraps the ENTIRE Scaffold ──────────
+    // This means the floating panel is NOT constrained by paddingValues,
+    // so it can truly cover the full screen height.
+    val scaffoldContent: @Composable () -> Unit = {
+        Scaffold(
+            containerColor = Color.Transparent,
+            contentWindowInsets = WindowInsets(0),   // let content manage its own insets
+            bottomBar = {
+                if (showBottomBar) {
+                    NavigationBar(
+                        containerColor = Color.Transparent,
+                        tonalElevation = 0.dp,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
+                            .background(
+                                if (isDark) colors.surfaceVariant.copy(alpha = 0.88f)
+                                else Color.White.copy(alpha = 0.85f),
+                                RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
                             )
-                        )
+                    ) {
+                        bottomNavItems.forEach { item ->
+                            val selected = currentRoute == item.screen.route
+                            NavigationBarItem(
+                                selected = selected,
+                                onClick = {
+                                    navController.navigate(item.screen.route) {
+                                        popUpTo(navController.graph.findStartDestination().id) {
+                                            saveState = true
+                                        }
+                                        launchSingleTop = true
+                                        restoreState    = true
+                                    }
+                                },
+                                icon = {
+                                    Icon(
+                                        imageVector        = if (selected) item.selectedIcon else item.unselectedIcon,
+                                        contentDescription = item.label
+                                    )
+                                },
+                                label = { Text(item.label) },
+                                colors = NavigationBarItemDefaults.colors(
+                                    selectedIconColor   = colors.primary,
+                                    selectedTextColor   = colors.primary,
+                                    indicatorColor      = colors.primary.copy(alpha = 0.12f),
+                                    unselectedIconColor = colors.onSurfaceVariant,
+                                    unselectedTextColor = colors.onSurfaceVariant
+                                )
+                            )
+                        }
                     }
                 }
             }
-        }
-    ) { paddingValues ->
-        val navContent: @Composable () -> Unit = {
+        ) { paddingValues ->
             NavHost(
                 navController      = navController,
                 startDestination   = Screen.Home.route,
-                modifier           = Modifier.padding(paddingValues),
+                modifier           = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues),
                 enterTransition    = { fadeIn(tween(220)) + slideInHorizontally { it / 5 } },
                 exitTransition     = { fadeOut(tween(180)) + slideOutHorizontally { -it / 5 } },
                 popEnterTransition = { fadeIn(tween(220)) + slideInHorizontally { -it / 5 } },
@@ -122,19 +146,27 @@ fun ScrollLightNavHost() {
                 composable(Screen.Home.route) {
                     HomeScreen(
                         onNavigateToBookContents = { navController.navigate(Screen.BookContents.route) },
-                        onNavigateToReading      = { b, c -> navController.navigate(Screen.Reading.createRoute(b, c)) },
-                        onNavigateToSearch       = { navController.navigate(Screen.Search.createRoute()) }
+                        onNavigateToReading = { b, c -> navController.navigate(Screen.Reading.createRoute(b, c)) },
+                        onNavigateToSearch  = { navController.navigate(Screen.Search.createRoute()) }
                     )
                 }
-                composable(Screen.Plans.route)   { PlansScreen() }
+                composable(Screen.Plans.route) { PlansScreen() }
                 composable(Screen.Explore.route) {
-                    Box(Modifier.fillMaxSize(), contentAlignment = androidx.compose.ui.Alignment.Center) {
-                        Text("探索功能即将上线", style = MaterialTheme.typography.headlineSmall,
-                            color = colors.onSurfaceVariant)
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = androidx.compose.ui.Alignment.Center
+                    ) {
+                        Text(
+                            "探索功能即将上线",
+                            style = MaterialTheme.typography.headlineSmall,
+                            color = colors.onSurfaceVariant
+                        )
                     }
                 }
                 composable(Screen.Profile.route) {
-                    ProfileScreen(onNavigateToAiSettings = { navController.navigate(Screen.AiSettings.route) })
+                    ProfileScreen(
+                        onNavigateToAiSettings = { navController.navigate(Screen.AiSettings.route) }
+                    )
                 }
                 composable(Screen.BookContents.route) {
                     BookContentsScreen(
@@ -146,17 +178,21 @@ fun ScrollLightNavHost() {
                     val bookId  = backStack.arguments?.getString("bookId")  ?: "mat"
                     val chapter = backStack.arguments?.getString("chapter")?.toIntOrNull() ?: 1
                     val readingVm: ReadingViewModel = hiltViewModel()
-                    val readingState by readingVm.state.collectAsState()
-                    LaunchedEffect(readingState.book, readingState.chapter, readingState.selectedVerse) {
-                        readingState.book?.let { book ->
+                    val rs by readingVm.state.collectAsState()
+
+                    LaunchedEffect(rs.book, rs.chapter, rs.selectedVerse) {
+                        rs.book?.let { book ->
                             readingCtx = AiReadingContext(
-                                bookId = book.id, bookName = book.name,
-                                chapter = readingState.chapter, selectedVerse = readingState.selectedVerse
+                                bookId        = book.id,
+                                bookName      = book.name,
+                                chapter       = rs.chapter,
+                                selectedVerse = rs.selectedVerse
                             )
                         }
                     }
                     ReadingScreen(
-                        bookId = bookId, chapter = chapter,
+                        bookId               = bookId,
+                        chapter              = chapter,
                         onBack               = { navController.popBackStack() },
                         onNavigateToSearch   = { navController.navigate(Screen.Search.createRoute()) },
                         onNavigateToContents = { navController.navigate(Screen.BookContents.route) }
@@ -175,16 +211,16 @@ fun ScrollLightNavHost() {
                 }
             }
         }
+    }
 
-        if (!hideFloating) {
-            AiFloatingWindowHost(
-                readingContext       = readingCtx,
-                onNavigateToSettings = { navController.navigate(Screen.AiSettings.route) },
-                vm                   = aiChatVm,
-                content              = navContent
-            )
-        } else {
-            navContent()
-        }
+    if (!hideFloating) {
+        AiFloatingWindowHost(
+            readingContext       = readingCtx,
+            onNavigateToSettings = { navController.navigate(Screen.AiSettings.route) },
+            vm                   = aiChatVm,
+            content              = scaffoldContent   // whole Scaffold is inside host
+        )
+    } else {
+        scaffoldContent()
     }
 }
