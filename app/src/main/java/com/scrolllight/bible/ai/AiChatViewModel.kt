@@ -112,7 +112,7 @@ class AiChatViewModel @Inject constructor(
         if (userText.isBlank()) return
         val cfg = _state.value.config
         if (!cfg.isConfigured) {
-            appendBubble(ChatBubble.Error("请先在设置中配置 API Key 和 Base URL。"))
+            appendBubble(ChatBubble.Error(message = "请先在设置中配置 API Key 和 Base URL。"))
             return
         }
 
@@ -181,7 +181,7 @@ class AiChatViewModel @Inject constructor(
 
                 is StreamChunk.Error -> {
                     removeBubble(assistantBubbleId)
-                    appendBubble(ChatBubble.Error(chunk.message))
+                    appendBubble(ChatBubble.Error(message = chunk.message))
                     _state.update { it.copy(isLoading = false) }
                 }
 
@@ -252,7 +252,7 @@ class AiChatViewModel @Inject constructor(
                     }
                     is StreamChunk.Error -> {
                         removeBubble(assistantBubbleId)
-                        appendBubble(ChatBubble.Error(chunk.message))
+                        appendBubble(ChatBubble.Error(message = chunk.message))
                         _state.update { it.copy(isLoading = false) }
                     }
                     else -> {}
