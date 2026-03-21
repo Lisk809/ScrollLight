@@ -279,8 +279,7 @@ fun AiSettingsScreen(
                             Row(modifier = Modifier.padding(10.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                 Icon(Icons.Outlined.Info, null, modifier = Modifier.size(14.dp),
                                     tint = MaterialTheme.colorScheme.tertiary)
-                                Text("关闭后AI只能对话，不能操控界面。
-建议：阿里百炼/部分模型如遇400错误，先关闭此项再试。",
+                                Text("关闭后AI只能对话，不能操控界面。\n建议：阿里百炼/部分模型如遇400错误，先关闭此项再试。",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onTertiaryContainer)
                             }
