@@ -7,113 +7,92 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.scrolllight.bible.data.model.PlanCategory
 import com.scrolllight.bible.data.model.ReadingPlan
-import com.scrolllight.bible.ui.components.PlanCard
-import com.scrolllight.bible.ui.components.SectionHeader
+import com.scrolllight.bible.ui.theme.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PlansScreen(vm: PlansViewModel = hiltViewModel()) {
     val state by vm.state.collectAsState()
-    var selectedTab by remember { mutableStateOf(0) }
+    var selectedTab by remember { mutableIntStateOf(0) }
     val tabs = listOf("我的计划", "所有计划", "已完成")
 
     Scaffold(
+        containerColor = Color.Transparent,
         topBar = {
             TopAppBar(
                 title = { Text("读经计划", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold) },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
             )
         }
     ) { padding ->
-        Column(modifier = Modifier.fillMaxSize().padding(padding)) {
-            TabRow(selectedTabIndex = selectedTab, containerColor = MaterialTheme.colorScheme.surface) {
+        Column(Modifier.fillMaxSize().padding(padding)) {
+            TabRow(
+                selectedTabIndex = selectedTab,
+                containerColor   = Color.Transparent,
+                contentColor     = MaterialTheme.colorScheme.primary
+            ) {
                 tabs.forEachIndexed { idx, title ->
-                    Tab(
-                        selected = selectedTab == idx,
-                        onClick = { selectedTab = idx },
-                        text = { Text(title) }
-                    )
+                    Tab(selected = selectedTab == idx, onClick = { selectedTab = idx },
+                        text = { Text(title, style = MaterialTheme.typography.labelLarge) })
                 }
             }
-
             when (selectedTab) {
-                0 -> MyPlansContent()
-                1 -> AllPlansContent(plans = state.allPlans, onStart = { vm.startPlan(it) })
-                2 -> CompletedPlansContent()
+                0 -> EmptyTabContent("还没有进行中的计划，\n去「所有计划」挑一个吧！")
+                1 -> AllPlansContent(state.allPlans) { vm.startPlan(it) }
+                2 -> EmptyTabContent("还没有完成的计划。")
             }
         }
     }
 }
 
 @Composable
-private fun MyPlansContent() {
-    Box(modifier = Modifier.fillMaxSize().padding(24.dp)) {
-        Text("还没有进行中的计划，去「所有计划」挑选一个吧！",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant)
-    }
-}
-
-@Composable
-private fun CompletedPlansContent() {
-    Box(modifier = Modifier.fillMaxSize().padding(24.dp)) {
-        Text("还没有完成的计划。", style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant)
+private fun EmptyTabContent(msg: String) {
+    Box(Modifier.fillMaxSize().padding(32.dp), contentAlignment = androidx.compose.ui.Alignment.TopCenter) {
+        AuroraCard(modifier = Modifier.fillMaxWidth()) {
+            Text(msg, modifier = Modifier.padding(20.dp),
+                style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
     }
 }
 
 @Composable
 private fun AllPlansContent(plans: List<ReadingPlan>, onStart: (ReadingPlan) -> Unit) {
     val grouped = plans.groupBy { it.category }
-    val order = listOf(PlanCategory.THEME, PlanCategory.WHOLE_BIBLE, PlanCategory.NEW_TESTAMENT, PlanCategory.OLD_TESTAMENT)
+    val order   = listOf(PlanCategory.THEME, PlanCategory.WHOLE_BIBLE, PlanCategory.NEW_TESTAMENT, PlanCategory.OLD_TESTAMENT)
 
     LazyColumn(
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         order.forEach { category ->
-            grouped[category]?.let { categoryPlans ->
+            grouped[category]?.let { catPlans ->
                 item {
-                    SectionHeader(
-                        title = category.displayName,
-                        action = "查看全部",
-                        onAction = {}
-                    )
+                    AuroraSectionHeader(category.displayName, "查看全部", {})
                     Spacer(Modifier.height(8.dp))
                 }
-                items(categoryPlans) { plan ->
-                    PlanCard(
-                        title = plan.title,
-                        days = plan.days,
-                        onClick = { onStart(plan) },
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                items(catPlans) { plan ->
+                    AuroraPlanCard(title = plan.title, days = plan.days, onClick = { onStart(plan) },
+                        modifier = Modifier.fillMaxWidth())
                 }
                 item { Spacer(Modifier.height(8.dp)) }
             }
         }
-
-        // Custom plan
         item {
-            OutlinedCard(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp)
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
+            AuroraCard(modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("自定义计划", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                    Text("创建属于你的个人读经计划", style = MaterialTheme.typography.bodyMedium,
+                    Text("创建专属读经计划", style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Spacer(Modifier.height(8.dp))
-                    Button(onClick = {}, shape = RoundedCornerShape(10.dp)) {
-                        Text("创建")
-                    }
+                    Button(onClick = {}, shape = RoundedCornerShape(12.dp)) { Text("创建") }
                 }
             }
         }
+        item { Spacer(Modifier.height(20.dp)) }
     }
 }

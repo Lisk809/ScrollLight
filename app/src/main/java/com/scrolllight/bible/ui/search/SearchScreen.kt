@@ -14,6 +14,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -22,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.scrolllight.bible.data.model.SearchResult
 import com.scrolllight.bible.data.model.SearchScope
+import com.scrolllight.bible.ui.theme.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -32,34 +35,38 @@ fun SearchScreen(
     vm: SearchViewModel = hiltViewModel()
 ) {
     val state by vm.state.collectAsState()
-    val focusRequester = remember { FocusRequester() }
+    val focus  = remember { FocusRequester() }
+    val colors = MaterialTheme.colorScheme
+    val isDark  = colors.background.luminance() < 0.15f
 
-    LaunchedEffect(initialQuery) {
-        if (initialQuery.isNotBlank()) vm.search(initialQuery)
-    }
-    LaunchedEffect(Unit) { focusRequester.requestFocus() }
+    LaunchedEffect(initialQuery) { if (initialQuery.isNotBlank()) vm.search(initialQuery) }
+    LaunchedEffect(Unit) { focus.requestFocus() }
 
     Scaffold(
+        containerColor = Color.Transparent,
         topBar = {
             TopAppBar(
-                navigationIcon = {
-                    IconButton(onClick = onBack) { Icon(Icons.Outlined.ArrowBackIosNew, "返回") }
-                },
+                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Outlined.ArrowBackIosNew, "返回") } },
                 title = {
                     OutlinedTextField(
-                        value = state.query,
-                        onValueChange = { vm.onQueryChange(it) },
-                        modifier = Modifier.fillMaxWidth().focusRequester(focusRequester),
+                        value = state.query, onValueChange = { vm.onQueryChange(it) },
+                        modifier = Modifier.fillMaxWidth().focusRequester(focus),
                         placeholder = { Text("搜索经文…") },
                         singleLine = true,
-                        shape = RoundedCornerShape(12.dp),
+                        shape = RoundedCornerShape(16.dp),
                         trailingIcon = {
                             if (state.query.isNotBlank()) {
                                 IconButton(onClick = { vm.onQueryChange("") }) {
-                                    Icon(Icons.Outlined.Close, "清除")
+                                    Icon(Icons.Outlined.Close, "清除", modifier = Modifier.size(18.dp))
                                 }
                             }
-                        }
+                        },
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor   = colors.primary.copy(0.5f),
+                            unfocusedBorderColor = colors.outline.copy(0.4f),
+                            focusedContainerColor   = if (isDark) colors.surfaceVariant.copy(0.6f) else Color.White.copy(0.7f),
+                            unfocusedContainerColor = if (isDark) colors.surfaceVariant.copy(0.4f) else Color.White.copy(0.5f),
+                        )
                     )
                 },
                 actions = {
@@ -67,11 +74,11 @@ fun SearchScreen(
                         Text("搜索", fontWeight = FontWeight.SemiBold)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
             )
         }
     ) { padding ->
-        Column(modifier = Modifier.fillMaxSize().padding(padding)) {
+        Column(Modifier.fillMaxSize().padding(padding)) {
             // Scope chips
             LazyRow(
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
@@ -80,66 +87,61 @@ fun SearchScreen(
                 items(SearchScope.values().toList()) { scope ->
                     FilterChip(
                         selected = state.scope == scope,
-                        onClick = { vm.setScope(scope) },
-                        label = { Text(scope.displayName) },
-                        shape = RoundedCornerShape(20.dp)
+                        onClick  = { vm.setScope(scope) },
+                        label    = { Text(scope.displayName, style = MaterialTheme.typography.labelMedium) },
+                        shape    = RoundedCornerShape(20.dp)
                     )
                 }
             }
 
             when {
                 state.isLoading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator()
+                    CircularProgressIndicator(color = colors.primary)
                 }
-                state.results.isEmpty() && state.query.isNotBlank() && !state.isLoading -> {
+                state.results.isEmpty() && state.query.isNotBlank() && !state.isLoading ->
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(Icons.Outlined.SearchOff, null, modifier = Modifier.size(48.dp),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Icon(Icons.Outlined.SearchOff, null, Modifier.size(48.dp),
+                                tint = colors.onSurfaceVariant)
                             Spacer(Modifier.height(8.dp))
-                            Text("在${state.scope.displayName}中为你找到了 0 个结果",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("在${state.scope.displayName}中找到 0 个结果",
+                                style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant)
                         }
                     }
-                }
                 state.results.isNotEmpty() -> {
-                    Text(
-                        "在${state.scope.displayName}中为你找到了 ${state.results.size} 个结果",
+                    Text("在${state.scope.displayName}中找到 ${state.results.size} 个结果",
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    LazyColumn(contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp)) {
+                        style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+                    LazyColumn(contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         items(state.results) { result ->
-                            SearchResultItem(
-                                result = result,
-                                query  = state.query,
-                                onClick = { onVerseClick(result.bookId, result.chapter) }
-                            )
-                            Divider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+                            SearchResultCard(result, state.query) { onVerseClick(result.bookId, result.chapter) }
                         }
+                        item { Spacer(Modifier.height(16.dp)) }
                     }
                 }
                 else -> {
-                    // Suggestions / empty state
-                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         Text("热门搜索", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        listOf("爱", "信心", "盼望", "平安", "恩典", "救恩").forEach { kw ->
-                            Surface(
-                                shape = RoundedCornerShape(8.dp),
-                                color = MaterialTheme.colorScheme.surfaceVariant,
-                                modifier = Modifier.clickable { vm.onQueryChange(kw); vm.search(kw) }
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(Icons.Outlined.TrendingUp, null, modifier = Modifier.size(16.dp),
-                                        tint = MaterialTheme.colorScheme.primary)
-                                    Text(kw, style = MaterialTheme.typography.bodyMedium)
+                            color = colors.onSurfaceVariant)
+                        listOf("爱", "信心", "盼望", "平安", "恩典", "救恩", "祷告", "智慧").chunked(4).forEach { row ->
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                row.forEach { kw ->
+                                    AuroraSurface(
+                                        shape = RoundedCornerShape(20.dp),
+                                        onClick = { vm.onQueryChange(kw); vm.search(kw) },
+                                        modifier = Modifier
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Icon(Icons.Outlined.TrendingUp, null, Modifier.size(14.dp),
+                                                tint = colors.primary)
+                                            Text(kw, style = MaterialTheme.typography.labelMedium)
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -151,28 +153,22 @@ fun SearchScreen(
 }
 
 @Composable
-private fun SearchResultItem(result: SearchResult, query: String, onClick: () -> Unit) {
-    Column(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp)
-    ) {
-        Text(
-            "${result.bookName}  ${result.chapter}:${result.verse}",
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.primary,
-            fontWeight = FontWeight.SemiBold
-        )
-        val annotated = buildAnnotatedString {
-            val text = result.text
-            val start = result.matchStart.coerceAtLeast(0)
-            val end = result.matchEnd.coerceAtMost(text.length)
-            append(text.substring(0, start))
-            withStyle(SpanStyle(color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold,
-                background = MaterialTheme.colorScheme.primaryContainer)) {
-                append(text.substring(start, end))
+private fun SearchResultCard(result: SearchResult, query: String, onClick: () -> Unit) {
+    val colors = MaterialTheme.colorScheme
+    AuroraCard(modifier = Modifier.fillMaxWidth(), onClick = onClick) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("${result.bookName}  ${result.chapter}:${result.verse}",
+                style = MaterialTheme.typography.labelLarge, color = colors.primary, fontWeight = FontWeight.Bold)
+            val annotated = buildAnnotatedString {
+                val text = result.text
+                val s = result.matchStart.coerceAtLeast(0)
+                val e = result.matchEnd.coerceAtMost(text.length)
+                append(text.substring(0, s))
+                withStyle(SpanStyle(color = colors.primary, fontWeight = FontWeight.Bold,
+                    background = colors.primaryContainer.copy(0.5f))) { append(text.substring(s, e)) }
+                append(text.substring(e))
             }
-            append(text.substring(end))
+            Text(annotated, style = MaterialTheme.typography.bodyMedium)
         }
-        Text(annotated, style = MaterialTheme.typography.bodyMedium)
     }
 }

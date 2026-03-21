@@ -20,8 +20,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.*
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -33,9 +33,10 @@ import androidx.compose.ui.unit.*
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.google.gson.GsonBuilder
 import com.google.gson.JsonParser
+import com.scrolllight.bible.ui.theme.*
 import kotlinx.coroutines.launch
 
-// ── Entry point ───────────────────────────────────────────────────────────────
+// ── Host ──────────────────────────────────────────────────────────────────────
 
 @Composable
 fun AiFloatingWindowHost(
@@ -47,117 +48,89 @@ fun AiFloatingWindowHost(
     val state by vm.state.collectAsState()
     LaunchedEffect(readingContext) { vm.updateReadingContext(readingContext) }
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    Box(Modifier.fillMaxSize()) {
         content()
 
-        // Dim scrim
-        AnimatedVisibility(
-            visible = state.panelVisible,
-            enter = fadeIn(tween(200)),
-            exit  = fadeOut(tween(180))
-        ) {
+        // Scrim
+        AnimatedVisibility(state.panelVisible, enter = fadeIn(tween(200)), exit = fadeOut(tween(180))) {
             Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.4f))
-                    .clickable(
-                        indication = null,
+                Modifier.fillMaxSize()
+                    .background(Color.Black.copy(0.38f))
+                    .clickable(indication = null,
                         interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
                     ) { vm.hidePanel() }
             )
         }
 
-        // Chat panel — bottom sheet style
+        // Panel
         AnimatedVisibility(
             visible  = state.panelVisible,
             enter    = slideInVertically(
                 initialOffsetY = { it },
                 animationSpec  = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMediumLow)
-            ) + fadeIn(tween(150)),
-            exit     = slideOutVertically(
-                targetOffsetY = { it },
-                animationSpec = spring(stiffness = Spring.StiffnessMedium)
-            ) + fadeOut(tween(120)),
+            ) + fadeIn(tween(140)),
+            exit     = slideOutVertically({ it }, spring(stiffness = Spring.StiffnessMedium)) + fadeOut(tween(120)),
             modifier = Modifier.align(Alignment.BottomCenter)
         ) {
-            AiChatPanel(
-                state              = state,
-                readingContext     = readingContext,
+            AiChatPanel(state, readingContext,
                 onClose            = { vm.hidePanel() },
                 onSend             = { vm.send(it) },
                 onInputChange      = { vm.setInputText(it) },
                 onClear            = { vm.clearHistory() },
-                onNavigateSettings = { vm.hidePanel(); onNavigateToSettings() }
-            )
+                onNavigateSettings = { vm.hidePanel(); onNavigateToSettings() })
         }
 
-        // Draggable bubble
+        // Bubble
         AnimatedVisibility(
             visible  = !state.panelVisible,
             enter    = scaleIn(spring(stiffness = Spring.StiffnessMedium)) + fadeIn(tween(150)),
             exit     = scaleOut(tween(120)) + fadeOut(tween(100)),
             modifier = Modifier.align(Alignment.BottomEnd)
         ) {
-            DraggableAiBubble(
-                isLoading  = state.isLoading,
-                hasHistory = state.bubbles.isNotEmpty(),
-                onClick    = { vm.showPanel() }
-            )
+            DraggableAiBubble(state.isLoading, state.bubbles.isNotEmpty()) { vm.showPanel() }
         }
     }
 }
 
-// ── Draggable bubble ──────────────────────────────────────────────────────────
+// ── Bubble ────────────────────────────────────────────────────────────────────
 
 @Composable
-private fun DraggableAiBubble(
-    isLoading: Boolean,
-    hasHistory: Boolean,
-    onClick: () -> Unit
-) {
+private fun DraggableAiBubble(isLoading: Boolean, hasHistory: Boolean, onClick: () -> Unit) {
     var dragOffset by remember { mutableStateOf(Offset.Zero) }
     val animOffset  = remember { Animatable(Offset.Zero, Offset.VectorConverter) }
     var isDragging  by remember { mutableStateOf(false) }
     var screenW     by remember { mutableFloatStateOf(1f) }
     val scope       = rememberCoroutineScope()
+    val colors      = MaterialTheme.colorScheme
+    val glass       = LocalGlassParams.current
 
     val glow by rememberInfiniteTransition(label = "glow").animateFloat(
-        initialValue = 0.25f, targetValue = 0.65f,
-        animationSpec = infiniteRepeatable(tween(1400, easing = EaseInOutSine), RepeatMode.Reverse),
-        label = "glowA"
+        0.22f, 0.60f,
+        infiniteRepeatable(tween(1500, easing = EaseInOutSine), RepeatMode.Reverse), "glowA"
     )
     val scale by animateFloatAsState(
-        targetValue   = if (isDragging) 1.15f else 1f,
-        animationSpec = spring(stiffness = Spring.StiffnessHigh),
-        label         = "bubbleScale"
+        if (isDragging) 1.14f else 1f, spring(stiffness = Spring.StiffnessHigh), label = "bs"
     )
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .onGloballyPositioned { screenW = it.size.width.toFloat() }
-    ) {
+    Box(Modifier.fillMaxSize().onGloballyPositioned { screenW = it.size.width.toFloat() }) {
         Box(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
                 .padding(end = 20.dp, bottom = 96.dp)
                 .offset {
-                    IntOffset(
-                        (animOffset.value.x + dragOffset.x).toInt(),
-                        (animOffset.value.y + dragOffset.y).toInt()
-                    )
+                    IntOffset((animOffset.value.x + dragOffset.x).toInt(),
+                        (animOffset.value.y + dragOffset.y).toInt())
                 }
                 .graphicsLayer { scaleX = scale; scaleY = scale }
                 .pointerInput(Unit) {
                     detectDragGestures(
-                        onDragStart = { isDragging = true },
-                        onDragEnd   = {
+                        onDragStart  = { isDragging = true },
+                        onDragEnd    = {
                             isDragging = false
                             scope.launch {
-                                // snap to nearest edge
-                                val targetX = if (dragOffset.x < -screenW / 3.5f) -screenW + 230f else 0f
+                                val tx = if (dragOffset.x < -screenW / 3.5f) -screenW + 230f else 0f
                                 animOffset.animateTo(
-                                    Offset(targetX, animOffset.value.y + dragOffset.y),
+                                    Offset(tx, animOffset.value.y + dragOffset.y),
                                     spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMediumLow)
                                 )
                                 dragOffset = Offset.Zero
@@ -170,51 +143,40 @@ private fun DraggableAiBubble(
                 .clickable(onClick = onClick),
             contentAlignment = Alignment.Center
         ) {
-            // glow ring
+            // Glow ring
             Box(
-                modifier = Modifier
-                    .size(72.dp)
-                    .clip(CircleShape)
-                    .background(Brush.radialGradient(listOf(Color(0xFFB45309).copy(alpha = glow), Color.Transparent)))
+                Modifier.size(72.dp).clip(CircleShape)
+                    .background(Brush.radialGradient(listOf(colors.primary.copy(glow), Color.Transparent)))
             )
-            // main button
+            // Button body
             Box(
-                modifier = Modifier
-                    .size(56.dp)
-                    .shadow(8.dp, CircleShape, ambientColor = Color(0x44B45309))
+                Modifier.size(56.dp)
+                    .shadow(10.dp, CircleShape, spotColor = colors.primary.copy(0.25f))
                     .clip(CircleShape)
-                    .background(Brush.linearGradient(listOf(Color(0xFFD97706), Color(0xFFB45309), Color(0xFF92400E)))),
+                    .background(Brush.linearGradient(listOf(colors.primary.copy(0.92f), colors.secondary.copy(0.80f))))
+                    .border(0.8.dp, Color.White.copy(0.28f), CircleShape),
                 contentAlignment = Alignment.Center
             ) {
-                if (isLoading) {
-                    CircularProgressIndicator(color = Color.White, strokeWidth = 2.5.dp, modifier = Modifier.size(24.dp))
-                } else {
-                    Text("✦", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-                }
+                if (isLoading) CircularProgressIndicator(Color.White, Modifier.size(22.dp), strokeWidth = 2.5.dp)
+                else Text("✦", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
             }
-            // unread badge
+            // Badge
             if (hasHistory && !isLoading) {
                 Box(
-                    modifier = Modifier
-                        .size(14.dp)
-                        .align(Alignment.TopEnd)
-                        .offset(x = (-8).dp, y = 8.dp)
-                        .clip(CircleShape)
-                        .background(Color(0xFF22C55E))
-                        .border(2.dp, Color.White, CircleShape)
+                    Modifier.size(13.dp).align(Alignment.TopEnd).offset((-8).dp, 8.dp)
+                        .clip(CircleShape).background(Color(0xFF4CAF88)).border(2.dp, Color.White, CircleShape)
                 )
             }
         }
     }
 }
 
-// ── Chat panel ────────────────────────────────────────────────────────────────
+// ── Panel ─────────────────────────────────────────────────────────────────────
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun AiChatPanel(
     state: AiChatUiState,
-    readingContext: AiReadingContext,
+    ctx: AiReadingContext,
     onClose: () -> Unit,
     onSend: (String) -> Unit,
     onInputChange: (String) -> Unit,
@@ -223,94 +185,76 @@ private fun AiChatPanel(
 ) {
     val listState = rememberLazyListState()
     val scope     = rememberCoroutineScope()
+    val colors    = MaterialTheme.colorScheme
+    val glass     = LocalGlassParams.current
+    val isDark    = colors.background.luminance() < 0.15f
+    val baseColor = if (isDark) colors.surfaceVariant else Color.White
 
-    // Auto-scroll to bottom when new bubbles arrive
     LaunchedEffect(state.bubbles.size) {
-        if (state.bubbles.isNotEmpty()) {
-            scope.launch { listState.animateScrollToItem(state.bubbles.size - 1) }
-        }
+        if (state.bubbles.isNotEmpty()) scope.launch { listState.animateScrollToItem(state.bubbles.size - 1) }
     }
 
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            // Use windowInsetsBottomHeight so panel sits above nav bar
-            .fillMaxHeight(fraction = 0.78f),
-        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
-        color = MaterialTheme.colorScheme.surface,
-        shadowElevation = 16.dp
+    Box(
+        modifier = Modifier.fillMaxWidth().fillMaxHeight(0.78f)
+            .glassBackground(
+                RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+                baseColor, (glass.cardAlpha + 0.12f).coerceAtMost(0.96f), glass.borderAlpha,
+                elevation = 20.dp, spotColor = colors.primary.copy(0.06f)
+            )
     ) {
-        Column(modifier = Modifier.fillMaxSize()) {
+        Column(Modifier.fillMaxSize()) {
 
-            // ── Header ────────────────────────────────────────────────────
+            // Header
             Box(
-                modifier = Modifier
-                    .fillMaxWidth()
+                Modifier.fillMaxWidth()
                     .background(
-                        Brush.horizontalGradient(listOf(Color(0xFFB45309), Color(0xFFD97706))),
+                        Brush.horizontalGradient(listOf(colors.primary.copy(0.85f), colors.secondary.copy(0.75f))),
                         RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
                     )
                     .padding(horizontal = 16.dp, vertical = 14.dp)
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    // Drag handle hint + title
+                Row(Modifier.fillMaxWidth(), Alignment.CenterVertically, Arrangement.SpaceBetween) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         Box(
-                            modifier = Modifier.size(38.dp).clip(CircleShape).background(Color.White.copy(0.2f)),
+                            Modifier.size(36.dp).clip(CircleShape).background(Color.White.copy(0.18f))
+                                .border(0.8.dp, Color.White.copy(0.3f), CircleShape),
                             contentAlignment = Alignment.Center
-                        ) { Text("✦", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold) }
+                        ) { Text("✦", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold) }
                         Column {
                             Text("AI 助读", color = Color.White, fontWeight = FontWeight.Bold,
                                 style = MaterialTheme.typography.titleMedium)
-                            if (readingContext.bookName.isNotBlank()) {
-                                Text("${readingContext.bookName} ${readingContext.chapter}章",
-                                    color = Color.White.copy(0.8f), style = MaterialTheme.typography.labelSmall)
-                            }
+                            if (ctx.bookName.isNotBlank())
+                                Text("${ctx.bookName} ${ctx.chapter}章", color = Color.White.copy(0.75f),
+                                    style = MaterialTheme.typography.labelSmall)
                         }
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         AnimatedVisibility(state.isLoading) {
-                            CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp,
-                                modifier = Modifier.size(18.dp))
+                            CircularProgressIndicator(Color.White, Modifier.size(18.dp), strokeWidth = 2.dp)
                         }
-                        IconButton(onClick = onClear) {
-                            Icon(Icons.Outlined.DeleteOutline, "清空对话", tint = Color.White.copy(0.9f))
-                        }
-                        IconButton(onClick = onNavigateSettings) {
-                            Icon(Icons.Outlined.Settings, "AI设置", tint = Color.White.copy(0.9f))
-                        }
-                        IconButton(onClick = onClose) {
-                            Icon(Icons.Outlined.KeyboardArrowDown, "收起", tint = Color.White)
-                        }
+                        IconButton(onClick = onClear) { Icon(Icons.Outlined.DeleteOutline, "清空", tint = Color.White.copy(0.9f)) }
+                        IconButton(onClick = onNavigateSettings) { Icon(Icons.Outlined.Settings, "设置", tint = Color.White.copy(0.9f)) }
+                        IconButton(onClick = onClose) { Icon(Icons.Outlined.KeyboardArrowDown, "收起", tint = Color.White) }
                     }
                 }
             }
 
-            // ── Config warning ─────────────────────────────────────────────
-            AnimatedVisibility(visible = !state.config.isConfigured) {
-                Surface(color = MaterialTheme.colorScheme.errorContainer.copy(0.6f)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(Icons.Outlined.Warning, null, tint = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.size(16.dp))
-                        Text("未配置 API Key", style = MaterialTheme.typography.bodySmall,
-                            modifier = Modifier.weight(1f))
-                        TextButton(
-                            onClick = onNavigateSettings,
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
-                        ) { Text("去设置", style = MaterialTheme.typography.labelMedium) }
+            // Config warning
+            AnimatedVisibility(!state.config.isConfigured) {
+                Row(
+                    Modifier.fillMaxWidth().background(colors.errorContainer.copy(0.6f))
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    Arrangement.spacedBy(8.dp), Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Outlined.Warning, null, tint = colors.error, modifier = Modifier.size(15.dp))
+                    Text("未配置 API Key", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+                    TextButton(onClick = onNavigateSettings, contentPadding = PaddingValues(0.dp)) {
+                        Text("去设置", style = MaterialTheme.typography.labelMedium, color = colors.primary)
                     }
                 }
             }
 
-            // ── Messages ───────────────────────────────────────────────────
+            // Messages
             LazyColumn(
                 state   = listState,
                 modifier = Modifier.weight(1f),
@@ -318,143 +262,89 @@ private fun AiChatPanel(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 if (state.bubbles.isEmpty()) {
-                    item {
-                        EmptyState(
-                            readingContext = readingContext,
-                            onSuggestion   = { onSend(it) }
-                        )
-                    }
+                    item { EmptyState(ctx) { onSend(it) } }
                 }
                 items(state.bubbles.size) { idx ->
                     val bubble = state.bubbles[idx]
-                    AnimatedVisibility(
-                        visible = true,
-                        enter = fadeIn(tween(200)) + slideInVertically { it / 2 }
-                    ) {
+                    AnimatedVisibility(true, enter = fadeIn(tween(200)) + slideInVertically { it / 2 }) {
                         when (bubble) {
-                            is ChatBubble.User        -> UserBubble(bubble)
-                            is ChatBubble.Assistant   -> AssistantBubble(bubble)
-                            is ChatBubble.ToolExecution -> ToolExecutionCard(bubble)
-                            is ChatBubble.Error       -> ErrorBubble(bubble)
+                            is ChatBubble.User         -> UserBubble(bubble)
+                            is ChatBubble.Assistant    -> AssistantBubble(bubble)
+                            is ChatBubble.ToolExecution -> ToolCard(bubble)
+                            is ChatBubble.Error        -> ErrorBubble(bubble)
                         }
                     }
                 }
             }
 
-            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(0.15f))
+            HorizontalDivider(color = colors.outline.copy(0.12f))
 
-            // ── Input row ─────────────────────────────────────────────────
-            // No navigationBarsPadding() here — Scaffold already handles it via paddingValues
+            // Input
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .imePadding()                               // push up when keyboard appears
-                    .padding(horizontal = 12.dp, vertical = 10.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
+                Modifier.fillMaxWidth().imePadding().padding(horizontal = 12.dp, vertical = 10.dp),
+                Arrangement.spacedBy(8.dp), Alignment.CenterVertically
             ) {
                 OutlinedTextField(
-                    value         = state.inputText,
-                    onValueChange = onInputChange,
-                    modifier      = Modifier.weight(1f),
-                    placeholder   = {
-                        Text(
-                            if (readingContext.bookName.isNotBlank())
-                                "询问关于${readingContext.bookName}的问题…"
-                            else "问我任何圣经相关的问题…",
-                            style = MaterialTheme.typography.bodyMedium
-                        )
+                    value = state.inputText, onValueChange = onInputChange,
+                    modifier = Modifier.weight(1f),
+                    placeholder = {
+                        Text(if (ctx.bookName.isNotBlank()) "询问关于${ctx.bookName}的问题…" else "问我任何圣经问题…",
+                            style = MaterialTheme.typography.bodyMedium)
                     },
-                    shape   = RoundedCornerShape(20.dp),
-                    maxLines = 4,
+                    shape = RoundedCornerShape(20.dp), maxLines = 4, enabled = !state.isLoading,
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
                     keyboardActions = KeyboardActions(onSend = {
                         if (state.inputText.isNotBlank() && !state.isLoading) onSend(state.inputText)
                     }),
-                    enabled = !state.isLoading
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor   = colors.primary.copy(0.45f),
+                        unfocusedBorderColor = colors.outline.copy(0.3f),
+                        focusedContainerColor   = if (isDark) colors.surfaceVariant.copy(0.5f) else Color.White.copy(0.65f),
+                        unfocusedContainerColor = if (isDark) colors.surfaceVariant.copy(0.3f) else Color.White.copy(0.45f),
+                    )
                 )
-                // Send button
                 val canSend = state.inputText.isNotBlank() && !state.isLoading && state.config.isConfigured
                 Box(
-                    modifier = Modifier
-                        .size(46.dp)
-                        .clip(CircleShape)
-                        .background(
-                            if (canSend) Brush.linearGradient(listOf(Color(0xFFD97706), Color(0xFFB45309)))
-                            else Brush.linearGradient(listOf(
-                                MaterialTheme.colorScheme.surfaceVariant,
-                                MaterialTheme.colorScheme.surfaceVariant
-                            ))
-                        )
+                    Modifier.size(46.dp).clip(CircleShape)
+                        .background(if (canSend) Brush.linearGradient(listOf(colors.primary.copy(0.9f), colors.secondary.copy(0.8f)))
+                                    else Brush.linearGradient(listOf(colors.surfaceVariant, colors.surfaceVariant)))
+                        .then(if (canSend) Modifier.border(0.8.dp, Color.White.copy(0.22f), CircleShape) else Modifier)
                         .clickable(enabled = canSend) { onSend(state.inputText) },
-                    contentAlignment = Alignment.Center
+                    Alignment.Center
                 ) {
-                    Icon(
-                        Icons.Outlined.Send, "发送",
-                        tint     = if (canSend) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(20.dp)
-                    )
+                    Icon(Icons.Outlined.Send, "发送", Modifier.size(20.dp),
+                        if (canSend) Color.White else colors.onSurfaceVariant)
                 }
             }
         }
     }
 }
 
-// ── Empty state with clickable suggestion chips ───────────────────────────────
+// ── Empty state ───────────────────────────────────────────────────────────────
 
 @Composable
-private fun EmptyState(
-    readingContext: AiReadingContext,
-    onSuggestion: (String) -> Unit
-) {
-    Column(
-        modifier = Modifier.fillMaxWidth().padding(20.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        Text("✦", fontSize = 36.sp, color = MaterialTheme.colorScheme.primary)
+private fun EmptyState(ctx: AiReadingContext, onSuggestion: (String) -> Unit) {
+    val colors = MaterialTheme.colorScheme
+    Column(Modifier.fillMaxWidth().padding(20.dp), Alignment.CenterHorizontally, Arrangement.spacedBy(12.dp)) {
+        Text("✦", fontSize = 34.sp, color = colors.primary)
         Text("光言 AI 助读", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-        Text(
-            "我可以解释经文、高亮关键节次、查找交叉参考，\n并直接操控阅读界面帮助你理解圣经。",
-            style     = MaterialTheme.typography.bodySmall,
-            color     = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center
-        )
-
-        if (readingContext.bookName.isNotBlank()) {
-            Surface(shape = RoundedCornerShape(8.dp), color = MaterialTheme.colorScheme.primaryContainer) {
-                Text(
-                    "当前：${readingContext.bookName} 第${readingContext.chapter}章",
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                    style    = MaterialTheme.typography.labelMedium,
-                    color    = MaterialTheme.colorScheme.primary
-                )
+        Text("解释经文、高亮节次、查找交叉参考，\n直接操控阅读界面。",
+            style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant, textAlign = TextAlign.Center)
+        if (ctx.bookName.isNotBlank()) {
+            Box(
+                Modifier.clip(RoundedCornerShape(20.dp)).background(colors.primary.copy(0.10f))
+                    .padding(horizontal = 12.dp, vertical = 5.dp)
+            ) {
+                Text("当前：${ctx.bookName} 第${ctx.chapter}章",
+                    style = MaterialTheme.typography.labelMedium, color = colors.primary)
             }
-
-            val suggestions = listOf(
-                "这章的主要主题是什么？",
-                "帮我高亮关键经文",
-                "有哪些交叉参考经文？",
-                "解释一下本章的历史背景"
-            )
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                suggestions.chunked(2).forEach { row ->
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        row.forEach { suggestion ->
-                            SuggestionChip(
-                                onClick  = { onSuggestion(suggestion) },   // ← 真正触发发送
-                                label    = {
-                                    Text(
-                                        suggestion,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        textAlign = TextAlign.Center
-                                    )
-                                },
-                                modifier = Modifier.weight(1f)
-                            )
+                listOf("这章的主要主题是什么？", "帮我高亮关键经文", "有哪些交叉参考？", "解释本章历史背景").chunked(2).forEach { row ->
+                    Row(Modifier.fillMaxWidth(), Arrangement.spacedBy(6.dp)) {
+                        row.forEach { s ->
+                            SuggestionChip(onClick = { onSuggestion(s) },
+                                label = { Text(s, style = MaterialTheme.typography.labelSmall, textAlign = TextAlign.Center) },
+                                modifier = Modifier.weight(1f))
                         }
                         if (row.size == 1) Spacer(Modifier.weight(1f))
                     }
@@ -464,48 +354,53 @@ private fun EmptyState(
     }
 }
 
-// ── Bubble composables ────────────────────────────────────────────────────────
+// ── Bubbles ───────────────────────────────────────────────────────────────────
 
 @Composable
-private fun UserBubble(bubble: ChatBubble.User) {
-    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-        Surface(
-            shape = RoundedCornerShape(18.dp, 4.dp, 18.dp, 18.dp),
-            color = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.widthIn(max = 280.dp)
-        ) {
-            Text(bubble.text, modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                color = MaterialTheme.colorScheme.onPrimary, style = MaterialTheme.typography.bodyMedium)
-        }
+private fun UserBubble(b: ChatBubble.User) {
+    val colors = MaterialTheme.colorScheme
+    Row(Modifier.fillMaxWidth(), Arrangement.End) {
+        Box(
+            Modifier.widthIn(max = 280.dp)
+                .shadow(4.dp, RoundedCornerShape(18.dp, 4.dp, 18.dp, 18.dp), spotColor = colors.primary.copy(0.1f))
+                .clip(RoundedCornerShape(18.dp, 4.dp, 18.dp, 18.dp))
+                .background(Brush.linearGradient(listOf(colors.primary.copy(0.88f), colors.secondary.copy(0.78f))))
+                .border(0.6.dp, Color.White.copy(0.2f), RoundedCornerShape(18.dp, 4.dp, 18.dp, 18.dp))
+                .padding(horizontal = 14.dp, vertical = 10.dp)
+        ) { Text(b.text, color = Color.White, style = MaterialTheme.typography.bodyMedium) }
     }
 }
 
 @Composable
-private fun AssistantBubble(bubble: ChatBubble.Assistant) {
-    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Start, verticalAlignment = Alignment.Top) {
+private fun AssistantBubble(b: ChatBubble.Assistant) {
+    val colors = MaterialTheme.colorScheme
+    val isDark  = colors.background.luminance() < 0.15f
+    Row(Modifier.fillMaxWidth(), Arrangement.Start, Alignment.Top) {
         Box(
-            modifier = Modifier.size(28.dp).clip(CircleShape)
-                .background(Brush.linearGradient(listOf(Color(0xFFD97706), Color(0xFFB45309)))),
-            contentAlignment = Alignment.Center
+            Modifier.size(28.dp).clip(CircleShape)
+                .background(Brush.linearGradient(listOf(colors.primary.copy(0.8f), colors.secondary.copy(0.7f))))
+                .border(0.6.dp, Color.White.copy(0.2f), CircleShape),
+            Alignment.Center
         ) { Text("✦", color = Color.White, fontSize = 12.sp) }
         Spacer(Modifier.width(8.dp))
-        Surface(
-            shape = RoundedCornerShape(4.dp, 18.dp, 18.dp, 18.dp),
-            color = MaterialTheme.colorScheme.surfaceVariant,
-            modifier = Modifier.widthIn(max = 280.dp)
+        Box(
+            Modifier.widthIn(max = 280.dp)
+                .glassBackground(
+                    RoundedCornerShape(4.dp, 18.dp, 18.dp, 18.dp),
+                    if (isDark) colors.surfaceVariant else Color.White,
+                    if (isDark) 0.65f else 0.80f, elevation = 3.dp
+                )
+                .padding(horizontal = 14.dp, vertical = 10.dp)
         ) {
-            Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
-                if (bubble.text.isBlank() && bubble.isStreaming) {
-                    TypingIndicator()
-                } else {
-                    Text(bubble.text, style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurface)
-                    if (bubble.isStreaming) {
+            Column {
+                if (b.text.isBlank() && b.isStreaming) TypingIndicator()
+                else {
+                    Text(b.text, style = MaterialTheme.typography.bodyMedium, color = colors.onSurface)
+                    if (b.isStreaming) {
                         Spacer(Modifier.height(6.dp))
                         LinearProgressIndicator(
-                            modifier   = Modifier.fillMaxWidth().height(2.dp).clip(RoundedCornerShape(1.dp)),
-                            color      = MaterialTheme.colorScheme.primary,
-                            trackColor = MaterialTheme.colorScheme.primaryContainer
+                            Modifier.fillMaxWidth().height(2.dp).clip(RoundedCornerShape(1.dp)),
+                            color = colors.primary.copy(0.6f), trackColor = colors.primary.copy(0.12f)
                         )
                     }
                 }
@@ -516,92 +411,70 @@ private fun AssistantBubble(bubble: ChatBubble.Assistant) {
 
 @Composable
 private fun TypingIndicator() {
-    val transition = rememberInfiniteTransition(label = "typing")
-    Row(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically) {
-        repeat(3) { idx ->
-            val alpha by transition.animateFloat(
-                initialValue = 0.25f, targetValue = 1f,
-                animationSpec = infiniteRepeatable(
-                    tween(400, delayMillis = idx * 130, easing = EaseInOutSine), RepeatMode.Reverse
-                ), label = "dot$idx"
-            )
-            Box(modifier = Modifier.size(7.dp).clip(CircleShape)
-                .background(MaterialTheme.colorScheme.primary.copy(alpha = alpha)))
+    val t = rememberInfiniteTransition("typing")
+    Row(Arrangement.spacedBy(5.dp), Alignment.CenterVertically) {
+        val colors = MaterialTheme.colorScheme
+        repeat(3) { i ->
+            val a by t.animateFloat(0.22f, 1f,
+                infiniteRepeatable(tween(400, i * 130, EaseInOutSine), RepeatMode.Reverse), "d$i")
+            Box(Modifier.size(7.dp).clip(CircleShape).background(colors.primary.copy(a)))
         }
     }
 }
 
 @Composable
-private fun ToolExecutionCard(bubble: ChatBubble.ToolExecution) {
-    val borderAlpha by if (bubble.isRunning) {
-        rememberInfiniteTransition(label = "border").animateFloat(
-            0.4f, 1f, infiniteRepeatable(tween(600), RepeatMode.Reverse), label = "borderA"
-        )
+private fun ToolCard(b: ChatBubble.ToolExecution) {
+    val colors = MaterialTheme.colorScheme
+    val isDark  = colors.background.luminance() < 0.15f
+    val bAlpha by if (b.isRunning) {
+        rememberInfiniteTransition("border").animateFloat(0.35f, 1f, infiniteRepeatable(tween(600), RepeatMode.Reverse), "ba")
     } else remember { mutableFloatStateOf(0.3f) }
 
     var expanded by remember { mutableStateOf(false) }
 
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .border(
-                1.dp,
-                if (bubble.isError) MaterialTheme.colorScheme.error.copy(borderAlpha)
-                else MaterialTheme.colorScheme.primary.copy(borderAlpha),
-                RoundedCornerShape(12.dp)
-            ),
-        shape = RoundedCornerShape(12.dp),
-        color = MaterialTheme.colorScheme.surface
+    Box(
+        Modifier.fillMaxWidth()
+            .glassBackground(RoundedCornerShape(14.dp), if (isDark) colors.surfaceVariant else Color.White,
+                0.80f, b.run { if (isError) colors.error else colors.primary }.let { 0.3f },
+                elevation = 4.dp)
+            .border(0.8.dp,
+                (if (b.isError) colors.error else colors.primary).copy(bAlpha), RoundedCornerShape(14.dp))
     ) {
-        Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth().clickable { expanded = !expanded },
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                    if (bubble.isRunning) {
-                        CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp,
-                            color = MaterialTheme.colorScheme.primary)
-                    } else {
-                        Icon(
-                            if (bubble.isError) Icons.Outlined.Error else Icons.Outlined.CheckCircle,
-                            null, modifier = Modifier.size(14.dp),
-                            tint = if (bubble.isError) MaterialTheme.colorScheme.error else Color(0xFF22C55E)
-                        )
-                    }
-                    Text(bubble.displayName, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Medium)
+        Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row(Modifier.fillMaxWidth().clickable { expanded = !expanded }, Alignment.CenterVertically, Arrangement.SpaceBetween) {
+                Row(Arrangement.spacedBy(6.dp), Alignment.CenterVertically) {
+                    if (b.isRunning) CircularProgressIndicator(Modifier.size(14.dp), colors.primary, strokeWidth = 2.dp)
+                    else Icon(if (b.isError) Icons.Outlined.Error else Icons.Outlined.CheckCircle,
+                        null, Modifier.size(14.dp), if (b.isError) colors.error else Color(0xFF4CAF88))
+                    Text(b.displayName, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Medium)
                 }
-                Icon(
-                    if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
-                    null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Icon(if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore, null,
+                    Modifier.size(16.dp), colors.onSurfaceVariant)
             }
             AnimatedVisibility(expanded) {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    val prettyArgs = remember(bubble.params) {
-                        try { GsonBuilder().setPrettyPrinting().create().toJson(JsonParser.parseString(bubble.params)) }
-                        catch (_: Exception) { bubble.params }
+                    val prettyArgs = remember(b.params) {
+                        try { GsonBuilder().setPrettyPrinting().create().toJson(JsonParser.parseString(b.params)) }
+                        catch (_: Exception) { b.params }
                     }
-                    Surface(shape = RoundedCornerShape(8.dp), color = MaterialTheme.colorScheme.surfaceVariant.copy(0.6f)) {
-                        Text(prettyArgs, modifier = Modifier.padding(8.dp),
-                            style = MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Box(
+                        Modifier.clip(RoundedCornerShape(8.dp)).background(colors.surfaceVariant.copy(0.5f)).padding(8.dp)
+                    ) {
+                        Text(prettyArgs, style = MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace),
+                            color = colors.onSurfaceVariant)
                     }
-                    bubble.result?.let { res ->
-                        val prettyResult = remember(res) {
+                    b.result?.let { res ->
+                        val pr = remember(res) {
                             try { GsonBuilder().setPrettyPrinting().create().toJson(JsonParser.parseString(res)) }
                             catch (_: Exception) { res }
                         }
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = if (bubble.isError) MaterialTheme.colorScheme.errorContainer.copy(0.4f)
-                                    else Color(0xFF22C55E).copy(alpha = 0.08f)
+                        Box(
+                            Modifier.clip(RoundedCornerShape(8.dp))
+                                .background(if (b.isError) colors.errorContainer.copy(0.4f) else Color(0xFF4CAF88).copy(0.08f))
+                                .padding(8.dp)
                         ) {
-                            Text(prettyResult, modifier = Modifier.padding(8.dp),
-                                style = MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace),
-                                color = if (bubble.isError) MaterialTheme.colorScheme.error
-                                        else MaterialTheme.colorScheme.onSurface)
+                            Text(pr, style = MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace),
+                                color = if (b.isError) colors.error else colors.onSurface)
                         }
                     }
                 }
@@ -611,17 +484,70 @@ private fun ToolExecutionCard(bubble: ChatBubble.ToolExecution) {
 }
 
 @Composable
-private fun ErrorBubble(bubble: ChatBubble.Error) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
-        color = MaterialTheme.colorScheme.errorContainer.copy(0.5f)
+private fun ErrorBubble(b: ChatBubble.Error) {
+    val colors = MaterialTheme.colorScheme
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
+            .background(colors.errorContainer.copy(0.5f)).padding(12.dp),
+        Arrangement.spacedBy(8.dp), Alignment.CenterVertically
     ) {
-        Row(modifier = Modifier.padding(12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Outlined.Error, null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(18.dp))
-            Text(bubble.message, style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onErrorContainer)
+        Icon(Icons.Outlined.Error, null, Modifier.size(16.dp), colors.error)
+        Text(b.message, style = MaterialTheme.typography.bodySmall, color = colors.onErrorContainer)
+    }
+}
+
+// expose AiChatPanel for ReadingScreen
+@Composable
+fun AiChatPanel(
+    messages: List<AiMessage>, input: String, onInputChange: (String) -> Unit,
+    onSend: () -> Unit, context: String, modifier: Modifier = Modifier
+) {
+    val colors = MaterialTheme.colorScheme
+    Column(modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+        Row(Modifier.fillMaxWidth(), Arrangement.spacedBy(8.dp), Alignment.CenterVertically) {
+            Box(
+                Modifier.size(36.dp).clip(CircleShape)
+                    .background(Brush.linearGradient(listOf(colors.primary.copy(0.8f), colors.secondary.copy(0.7f)))),
+                Alignment.Center
+            ) { Text("✦", color = Color.White) }
+            Column {
+                Text("AI 助读", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text(context, style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant)
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+        HorizontalDivider(color = colors.outline.copy(0.15f))
+        LazyColumn(Modifier.weight(1f).padding(vertical = 8.dp), reverseLayout = true) {
+            items(messages.reversed().size) { i ->
+                val msg = messages.reversed()[i]
+                val isUser = msg.role == AiMessage.Role.USER
+                Row(Modifier.fillMaxWidth().padding(vertical = 3.dp),
+                    if (isUser) Arrangement.End else Arrangement.Start) {
+                    Box(
+                        Modifier.widthIn(max = 260.dp).clip(
+                            if (isUser) RoundedCornerShape(14.dp, 4.dp, 14.dp, 14.dp)
+                            else RoundedCornerShape(4.dp, 14.dp, 14.dp, 14.dp)
+                        ).background(if (isUser) colors.primary else colors.surfaceVariant).padding(10.dp)
+                    ) {
+                        Text(msg.content,
+                            color = if (isUser) colors.onPrimary else colors.onSurface,
+                            style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            }
+        }
+        Row(Modifier.fillMaxWidth().padding(bottom = 12.dp), Arrangement.spacedBy(8.dp), Alignment.CenterVertically) {
+            OutlinedTextField(
+                value = input, onValueChange = onInputChange, modifier = Modifier.weight(1f),
+                placeholder = { Text("询问…") }, shape = RoundedCornerShape(16.dp), singleLine = true
+            )
+            IconButton(onClick = onSend, enabled = input.isNotBlank()) {
+                Icon(Icons.Outlined.Send, "发送", tint = if (input.isNotBlank()) colors.primary else colors.onSurfaceVariant)
+            }
         }
     }
+}
+
+private fun androidx.compose.foundation.lazy.LazyListScope.items(count: Int, content: @Composable (Int) -> Unit) {
+    repeat(count) { item { content(it) } }
 }

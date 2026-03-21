@@ -1,18 +1,21 @@
 package com.scrolllight.bible.ui.navigation
 
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.foundation.layout.padding
-import androidx.compose.ui.unit.dp
+import androidx.compose.animation.*
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.*
@@ -24,6 +27,7 @@ import com.scrolllight.bible.ui.reading.BookContentsScreen
 import com.scrolllight.bible.ui.reading.ReadingScreen
 import com.scrolllight.bible.ui.reading.ReadingViewModel
 import com.scrolllight.bible.ui.search.SearchScreen
+import com.scrolllight.bible.ui.theme.glassBackground
 
 sealed class Screen(val route: String) {
     object Home         : Screen("home")
@@ -64,10 +68,22 @@ fun ScrollLightNavHost() {
     val aiChatVm: AiChatViewModel = hiltViewModel()
     var readingCtx by remember { mutableStateOf(AiReadingContext("", "", 0)) }
 
+    val colors = MaterialTheme.colorScheme
+    val isDark  = colors.background.luminance() < 0.15f
+    val navBg   = if (isDark) colors.surfaceVariant.copy(0.85f) else Color.White.copy(0.82f)
+
     Scaffold(
+        containerColor = Color.Transparent,
         bottomBar = {
             if (showBottomBar) {
-                NavigationBar(containerColor = MaterialTheme.colorScheme.surface, tonalElevation = 3.dp) {
+                NavigationBar(
+                    containerColor = navBg,
+                    tonalElevation = 0.dp,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
+                        .background(navBg, RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
+                ) {
                     bottomNavItems.forEach { item ->
                         val selected = currentRoute == item.screen.route
                         NavigationBarItem(
@@ -81,11 +97,11 @@ fun ScrollLightNavHost() {
                             icon  = { Icon(if (selected) item.selectedIcon else item.unselectedIcon, item.label) },
                             label = { Text(item.label) },
                             colors = NavigationBarItemDefaults.colors(
-                                selectedIconColor   = MaterialTheme.colorScheme.primary,
-                                selectedTextColor   = MaterialTheme.colorScheme.primary,
-                                indicatorColor      = MaterialTheme.colorScheme.primaryContainer,
-                                unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                                unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                selectedIconColor   = colors.primary,
+                                selectedTextColor   = colors.primary,
+                                indicatorColor      = colors.primary.copy(alpha = 0.12f),
+                                unselectedIconColor = colors.onSurfaceVariant,
+                                unselectedTextColor = colors.onSurfaceVariant
                             )
                         )
                     }
@@ -98,10 +114,10 @@ fun ScrollLightNavHost() {
                 navController      = navController,
                 startDestination   = Screen.Home.route,
                 modifier           = Modifier.padding(paddingValues),
-                enterTransition    = { fadeIn() + slideInHorizontally { it / 4 } },
-                exitTransition     = { fadeOut() + slideOutHorizontally { -it / 4 } },
-                popEnterTransition = { fadeIn() + slideInHorizontally { -it / 4 } },
-                popExitTransition  = { fadeOut() + slideOutHorizontally { it / 4 } }
+                enterTransition    = { fadeIn(tween(220)) + slideInHorizontally { it / 5 } },
+                exitTransition     = { fadeOut(tween(180)) + slideOutHorizontally { -it / 5 } },
+                popEnterTransition = { fadeIn(tween(220)) + slideInHorizontally { -it / 5 } },
+                popExitTransition  = { fadeOut(tween(180)) + slideOutHorizontally { it / 5 } }
             ) {
                 composable(Screen.Home.route) {
                     HomeScreen(
@@ -112,10 +128,10 @@ fun ScrollLightNavHost() {
                 }
                 composable(Screen.Plans.route)   { PlansScreen() }
                 composable(Screen.Explore.route) {
-                    androidx.compose.foundation.layout.Box(
-                        modifier = Modifier.padding(),
-                        contentAlignment = androidx.compose.ui.Alignment.Center
-                    ) { Text("探索（即将上线）", style = MaterialTheme.typography.headlineSmall) }
+                    Box(Modifier.fillMaxSize(), contentAlignment = androidx.compose.ui.Alignment.Center) {
+                        Text("探索功能即将上线", style = MaterialTheme.typography.headlineSmall,
+                            color = colors.onSurfaceVariant)
+                    }
                 }
                 composable(Screen.Profile.route) {
                     ProfileScreen(onNavigateToAiSettings = { navController.navigate(Screen.AiSettings.route) })
@@ -140,7 +156,7 @@ fun ScrollLightNavHost() {
                         }
                     }
                     ReadingScreen(
-                        bookId               = bookId, chapter = chapter,
+                        bookId = bookId, chapter = chapter,
                         onBack               = { navController.popBackStack() },
                         onNavigateToSearch   = { navController.navigate(Screen.Search.createRoute()) },
                         onNavigateToContents = { navController.navigate(Screen.BookContents.route) }
