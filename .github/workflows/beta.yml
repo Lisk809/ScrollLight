@@ -25,8 +25,6 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
           cache: gradle
-      - name: Grant execute permission
-        run: chmod +x gradlew
         
       - name: Download gradle-wrapper.jar
         run: |
@@ -34,15 +32,19 @@ jobs:
             curl -fsSL \
             "https://github.com/gradle/gradle/raw/v8.11.1/gradle/wrapper/gradle-wrapper.jar" \
             -o gradle/wrapper/gradle-wrapper.jar
+            
+      - name: Grant execute permission
+        run: chmod +x ./gradlew
+        
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
             gradle-version: wrapper   # ← 读 gradle-wrapper.properties 里的版本，无需手写版本号
       - name: Run lint
-        run: gradlew lint --stacktrace
+        run: ./gradlew lint --stacktrace
 
       - name: Run unit tests
-        run: gradlew testDebugUnitTest --stacktrace
+        run: ./gradlew testDebugUnitTest --stacktrace
 
       - name: Upload lint report
         if: always()
@@ -74,10 +76,10 @@ jobs:
           cache: gradle
 
       - name: Grant execute permission
-        run: chmod +x gradlew
+        run: chmod +x ./gradlew
 
       - name: Build debug APK
-        run: gradlew assembleDebug --stacktrace
+        run: ./gradlew assembleDebug --stacktrace
 
       - name: Rename APK with commit SHA
         run: |
@@ -121,7 +123,7 @@ jobs:
           target: google_apis
           arch: x86_64
           profile: pixel_6
-          script: gradlew connectedDebugAndroidTest --stacktrace
+          script: ./gradlew connectedDebugAndroidTest --stacktrace
 
       - name: Upload instrumented test results
         if: always()
