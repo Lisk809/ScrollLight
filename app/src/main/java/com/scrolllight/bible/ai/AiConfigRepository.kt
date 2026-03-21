@@ -22,12 +22,20 @@ data class AiConfig(
     val baseUrl: String  = "https://api.openai.com/v1",
     val apiKey: String   = "",
     val model: String    = "gpt-4o-mini",
+    val platform: AiPlatform = AiPlatform.OPENAI,
     val systemPrompt: String = DEFAULT_SYSTEM_PROMPT,
     val maxTokens: Int   = 2048,
     val temperature: Float = 0.7f,
     val streamEnabled: Boolean = true,
-    val toolCallingEnabled: Boolean = true   // disable for APIs that don't support tools
+    val toolCallingEnabled: Boolean = true
 ) {
+    /** 综合判断：是否真正发送工具列表 */
+    val shouldSendTools: Boolean get() =
+        toolCallingEnabled && platform.supportsTools
+
+    /** 是否强制关闭流式（某些平台工具调用必须非流式） */
+    val effectiveStream: Boolean get() =
+        streamEnabled && !(shouldSendTools && platform.requiresStreamFalseForTools)
     val isConfigured: Boolean get() = apiKey.isNotBlank() && baseUrl.isNotBlank()
     val chatEndpoint: String  get() = baseUrl.trimEnd('/') + "/chat/completions"
 }
@@ -58,6 +66,7 @@ object AiConfigKeys {
     val TEMPERATURE   = stringPreferencesKey("ai_temperature")
     val STREAM        = stringPreferencesKey("ai_stream")
     val TOOL_CALLING  = stringPreferencesKey("ai_tool_calling")
+    val PLATFORM      = stringPreferencesKey("ai_platform")
 }
 
 // ── Repository ────────────────────────────────────────────────────────────────
@@ -75,7 +84,10 @@ class AiConfigRepository @Inject constructor(
             maxTokens    = prefs[AiConfigKeys.MAX_TOKENS]?.toIntOrNull() ?: 2048,
             temperature  = prefs[AiConfigKeys.TEMPERATURE]?.toFloatOrNull() ?: 0.7f,
             streamEnabled        = prefs[AiConfigKeys.STREAM]?.toBooleanStrictOrNull() ?: true,
-            toolCallingEnabled   = prefs[AiConfigKeys.TOOL_CALLING]?.toBooleanStrictOrNull() ?: true
+            toolCallingEnabled   = prefs[AiConfigKeys.TOOL_CALLING]?.toBooleanStrictOrNull() ?: true,
+            platform             = prefs[AiConfigKeys.PLATFORM]?.let {
+                try { AiPlatform.valueOf(it) } catch (_: Exception) { AiPlatform.OPENAI }
+            } ?: AiPlatform.OPENAI
         )
     }
 
@@ -89,6 +101,7 @@ class AiConfigRepository @Inject constructor(
             prefs[AiConfigKeys.TEMPERATURE]   = config.temperature.toString()
             prefs[AiConfigKeys.STREAM]        = config.streamEnabled.toString()
             prefs[AiConfigKeys.TOOL_CALLING]  = config.toolCallingEnabled.toString()
+            prefs[AiConfigKeys.PLATFORM]      = config.platform.name
         }
     }
 

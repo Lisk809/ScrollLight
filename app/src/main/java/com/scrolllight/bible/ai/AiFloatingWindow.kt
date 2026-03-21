@@ -34,6 +34,10 @@ import androidx.compose.ui.unit.*
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.google.gson.GsonBuilder
 import com.google.gson.JsonParser
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import androidx.compose.ui.platform.LocalContext
 import com.scrolllight.bible.ui.theme.*
 import kotlinx.coroutines.launch
 
@@ -522,13 +526,53 @@ private fun EmptyState(ctx: AiReadingContext, onSuggestion: (String) -> Unit) {
 
 // ── Bubbles ───────────────────────────────────────────────────────────────────
 
+
+// ── Copy Button ───────────────────────────────────────────────────────────────
+
+@Composable
+private fun CopyButton(text: String, context: Context, modifier: Modifier = Modifier) {
+    val colors = MaterialTheme.colorScheme
+    var copied by remember { mutableStateOf(false) }
+
+    LaunchedEffect(copied) {
+        if (copied) {
+            kotlinx.coroutines.delay(1500)
+            copied = false
+        }
+    }
+
+    Row(
+        modifier = modifier
+            .clip(RoundedCornerShape(20.dp))
+            .clickable {
+                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                clipboard.setPrimaryClip(ClipData.newPlainText("AI回复", text))
+                copied = true
+            }
+            .padding(horizontal = 8.dp, vertical = 3.dp),
+        horizontalArrangement = Arrangement.spacedBy(3.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = if (copied) Icons.Outlined.CheckCircle else Icons.Outlined.ContentCopy,
+            contentDescription = "复制",
+            modifier = Modifier.size(12.dp),
+            tint = if (copied) colors.primary else colors.onSurfaceVariant.copy(alpha = 0.6f)
+        )
+        Text(
+            text  = if (copied) "已复制" else "复制",
+            style = MaterialTheme.typography.labelSmall,
+            color = if (copied) colors.primary else colors.onSurfaceVariant.copy(alpha = 0.6f)
+        )
+    }
+}
+
 @Composable
 private fun UserBubble(b: ChatBubble.User) {
-    val colors = MaterialTheme.colorScheme
-    Row(
-        modifier              = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.End
-    ) {
+    val colors  = MaterialTheme.colorScheme
+    val context = LocalContext.current
+    Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.End,
+        verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Box(
             modifier = Modifier
                 .widthIn(max = 280.dp)
@@ -542,57 +586,67 @@ private fun UserBubble(b: ChatBubble.User) {
         ) {
             Text(b.text, color = Color.White, style = MaterialTheme.typography.bodyMedium)
         }
+        CopyButton(text = b.text, context = context)
     }
 }
 
 @Composable
 private fun AssistantBubble(b: ChatBubble.Assistant) {
-    val colors = MaterialTheme.colorScheme
+    val colors  = MaterialTheme.colorScheme
     val isDark  = colors.background.luminance() < 0.15f
-    Row(
-        modifier              = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.Start,
-        verticalAlignment     = Alignment.Top
-    ) {
-        Box(
-            modifier = Modifier
-                .size(28.dp)
-                .clip(CircleShape)
-                .background(
-                    Brush.linearGradient(listOf(colors.primary.copy(alpha = 0.8f), colors.secondary.copy(alpha = 0.7f)))
-                )
-                .border(0.6.dp, Color.White.copy(alpha = 0.2f), CircleShape),
-            contentAlignment = Alignment.Center
+    val context = LocalContext.current
+
+    Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Row(
+            modifier              = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.Start,
+            verticalAlignment     = Alignment.Top
         ) {
-            Text("✦", color = Color.White, fontSize = 12.sp)
-        }
-        Spacer(Modifier.width(8.dp))
-        Box(
-            modifier = Modifier
-                .widthIn(max = 280.dp)
-                .glassBackground(
-                    shape      = RoundedCornerShape(4.dp, 18.dp, 18.dp, 18.dp),
-                    glassColor = if (isDark) colors.surfaceVariant else Color.White,
-                    alpha      = if (isDark) 0.65f else 0.80f,
-                    elevation  = 3.dp
-                )
-                .padding(horizontal = 14.dp, vertical = 10.dp)
-        ) {
-            Column {
-                if (b.text.isBlank() && b.isStreaming) {
-                    TypingIndicator()
-                } else {
-                    Text(b.text, style = MaterialTheme.typography.bodyMedium, color = colors.onSurface)
-                    if (b.isStreaming) {
-                        Spacer(Modifier.height(6.dp))
-                        LinearProgressIndicator(
-                            modifier   = Modifier.fillMaxWidth().height(2.dp).clip(RoundedCornerShape(1.dp)),
-                            color      = colors.primary.copy(alpha = 0.6f),
-                            trackColor = colors.primary.copy(alpha = 0.12f)
-                        )
+            Box(
+                modifier = Modifier
+                    .size(28.dp)
+                    .clip(CircleShape)
+                    .background(
+                        Brush.linearGradient(listOf(colors.primary.copy(alpha = 0.8f), colors.secondary.copy(alpha = 0.7f)))
+                    )
+                    .border(0.6.dp, Color.White.copy(alpha = 0.2f), CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("✦", color = Color.White, fontSize = 12.sp)
+            }
+            Spacer(Modifier.width(8.dp))
+            Box(
+                modifier = Modifier
+                    .widthIn(max = 280.dp)
+                    .glassBackground(
+                        shape      = RoundedCornerShape(4.dp, 18.dp, 18.dp, 18.dp),
+                        glassColor = if (isDark) colors.surfaceVariant else Color.White,
+                        alpha      = if (isDark) 0.65f else 0.80f,
+                        elevation  = 3.dp
+                    )
+                    .padding(horizontal = 14.dp, vertical = 10.dp)
+            ) {
+                Column {
+                    if (b.text.isBlank() && b.isStreaming) {
+                        TypingIndicator()
+                    } else {
+                        Text(b.text, style = MaterialTheme.typography.bodyMedium, color = colors.onSurface)
+                        if (b.isStreaming) {
+                            Spacer(Modifier.height(6.dp))
+                            LinearProgressIndicator(
+                                modifier   = Modifier.fillMaxWidth().height(2.dp).clip(RoundedCornerShape(1.dp)),
+                                color      = colors.primary.copy(alpha = 0.6f),
+                                trackColor = colors.primary.copy(alpha = 0.12f)
+                            )
+                        }
                     }
                 }
             }
+        }
+        // Copy button — only when text is available and not streaming
+        if (b.text.isNotBlank() && !b.isStreaming) {
+            CopyButton(text = b.text, context = context,
+                modifier = Modifier.padding(start = 36.dp))
         }
     }
 }

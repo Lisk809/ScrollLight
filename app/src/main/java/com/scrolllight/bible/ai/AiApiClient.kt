@@ -95,14 +95,21 @@ class AiApiClient @Inject constructor(private val gson: Gson) {
         addProperty("max_tokens", config.maxTokens)
         addProperty("temperature", config.temperature.toDouble())
         addProperty("stream", stream)
-        // Only include tools if explicitly enabled in config
-        if (config.toolCallingEnabled) {
+        // Add extra headers defined by platform (injected at request level instead)
+        // Only send tools if platform + user config both allow it
+        if (config.shouldSendTools) {
             add("tools", ToolDefinitions.all)
-            // Use object form for tool_choice — more widely compatible than string "auto"
-            // Alibaba Bailian, DeepSeek etc. accept this form
-            add("tool_choice", JsonObject().apply {
-                addProperty("type", "auto")
-            })
+            // tool_choice format varies by platform:
+            // STRING_AUTO → "auto"  (Bailian, DeepSeek, Groq, most compatible)
+            // OBJECT_AUTO → {"type":"auto"}  (newer OpenAI spec)
+            // NONE        → omit field entirely
+            when (config.platform.toolChoiceFormat) {
+                ToolChoiceFormat.STRING_AUTO -> addProperty("tool_choice", "auto")
+                ToolChoiceFormat.OBJECT_AUTO -> add("tool_choice", JsonObject().apply {
+                    addProperty("type", "auto")
+                })
+                ToolChoiceFormat.NONE        -> { /* omit */ }
+            }
         }
     }.toString()
 
@@ -127,12 +134,13 @@ class AiApiClient @Inject constructor(private val gson: Gson) {
 
     fun streamChat(config: AiConfig, messages: JsonArray): Flow<StreamChunk> = callbackFlow {
         val body    = buildBody(config, messages, stream = true)
-        val request = Request.Builder()
+        val reqBuilder = Request.Builder()
             .url(config.chatEndpoint)
             .addHeader("Authorization", "Bearer ${config.apiKey}")
             .addHeader("Accept", "text/event-stream")
-            .post(body.toRequestBody(JSON_MEDIA))
-            .build()
+        // Inject platform-specific extra headers
+        config.platform.extraHeaders.forEach { (k, v) -> reqBuilder.addHeader(k, v) }
+        val request = reqBuilder.post(body.toRequestBody(JSON_MEDIA)).build()
 
         val toolCallBuffers = mutableMapOf<Int, Triple<String, String, StringBuilder>>()
 
@@ -207,11 +215,11 @@ class AiApiClient @Inject constructor(private val gson: Gson) {
 
     fun chat(config: AiConfig, messages: JsonArray): Flow<StreamChunk> = flow {
         val body    = buildBody(config, messages, stream = false)
-        val request = Request.Builder()
+        val reqBuilder = Request.Builder()
             .url(config.chatEndpoint)
             .addHeader("Authorization", "Bearer ${config.apiKey}")
-            .post(body.toRequestBody(JSON_MEDIA))
-            .build()
+        config.platform.extraHeaders.forEach { (k, v) -> reqBuilder.addHeader(k, v) }
+        val request = reqBuilder.post(body.toRequestBody(JSON_MEDIA)).build()
 
         try {
             val response = withContext(Dispatchers.IO) { client.newCall(request).execute() }
@@ -252,7 +260,7 @@ class AiApiClient @Inject constructor(private val gson: Gson) {
     // ── Entry point ───────────────────────────────────────────────────────
 
     fun send(config: AiConfig, messages: JsonArray): Flow<StreamChunk> =
-        if (config.streamEnabled) streamChat(config, messages) else chat(config, messages)
+        if (config.effectiveStream) streamChat(config, messages) else chat(config, messages)
 
     // ── Fetch available models ────────────────────────────────────────────
 

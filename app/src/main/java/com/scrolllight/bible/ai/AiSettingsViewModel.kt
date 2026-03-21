@@ -41,6 +41,15 @@ class AiSettingsViewModel @Inject constructor(
     fun setTemperature(v: Float)    = _state.update { it.copy(draft = it.draft.copy(temperature = v)) }
     fun setStream(v: Boolean)       = _state.update { it.copy(draft = it.draft.copy(streamEnabled = v)) }
     fun setToolCalling(v: Boolean)  = _state.update { it.copy(draft = it.draft.copy(toolCallingEnabled = v)) }
+    fun setPlatform(p: AiPlatform)  = _state.update { s ->
+        val d = s.draft
+        // Auto-fill URL and model if still at default or empty
+        val newUrl   = if (d.baseUrl.isBlank() || d.platform != AiPlatform.CUSTOM) p.defaultBaseUrl else d.baseUrl
+        val newModel = if (d.model.isBlank()   || d.platform != AiPlatform.CUSTOM) p.defaultModel   else d.model
+        // Disable tools for platforms that don't support them
+        s.copy(draft = d.copy(platform = p, baseUrl = newUrl, model = newModel,
+            toolCallingEnabled = if (!p.supportsTools) false else d.toolCallingEnabled))
+    }
     fun setSystemPrompt(p: String)  = _state.update { it.copy(draft = it.draft.copy(systemPrompt = p)) }
     fun resetSystemPrompt()         = _state.update { it.copy(draft = it.draft.copy(systemPrompt = DEFAULT_SYSTEM_PROMPT)) }
 
