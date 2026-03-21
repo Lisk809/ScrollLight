@@ -91,7 +91,7 @@ fun AiFloatingWindowHost(
         ) {
             AiChatPanel(
                 state              = state,
-                ctx                = readingContext,
+                ctx                = state.currentContext,  // always from ViewModel, always fresh
                 onClose            = { vm.hidePanel() },
                 onSend             = { vm.send(it) },
                 onInputChange      = { vm.setInputText(it) },

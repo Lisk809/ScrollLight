@@ -59,7 +59,8 @@ data class AiChatUiState(
     val isLoading: Boolean = false,
     val config: AiConfig = AiConfig(),
     val panelVisible: Boolean = false,
-    val inputText: String = ""
+    val inputText: String = "",
+    val currentContext: AiReadingContext = AiReadingContext("", "", 0)
 )
 
 // ── ViewModel ─────────────────────────────────────────────────────────────────
@@ -78,8 +79,9 @@ class AiChatViewModel @Inject constructor(
     // The actual messages array sent to API (includes system + all turns)
     private val messageHistory = JsonArray()
 
-    // Track current reading context (updated from ReadingViewModel)
-    private var readingContext = AiReadingContext("", "", 1)
+    // Track current reading context - use StateFlow so it's always current
+    private val _readingContext = kotlinx.coroutines.flow.MutableStateFlow(AiReadingContext("", "", 1))
+    private val readingContext: AiReadingContext get() = _readingContext.value
 
     init {
         viewModelScope.launch {
@@ -90,7 +92,9 @@ class AiChatViewModel @Inject constructor(
     }
 
     fun updateReadingContext(ctx: AiReadingContext) {
-        readingContext = ctx
+        _readingContext.value = ctx
+        // Also expose in UI state so panel header shows correct chapter
+        _state.update { it.copy(currentContext = ctx) }
     }
 
     fun setInputText(text: String) = _state.update { it.copy(inputText = text) }

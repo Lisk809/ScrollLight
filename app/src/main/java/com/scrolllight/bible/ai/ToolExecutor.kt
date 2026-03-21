@@ -24,10 +24,15 @@ class ToolExecutor @Inject constructor(
         readingContext: AiReadingContext
     ): ToolResult {
         return try {
-            val args = if (call.arguments.isBlank() || call.arguments == "{}") {
-                com.google.gson.JsonObject()
-            } else {
-                JsonParser.parseString(call.arguments).asJsonObject
+            // Models sometimes return "null" or empty string for no-arg tools
+            val args = when {
+                call.arguments.isBlank()    -> com.google.gson.JsonObject()
+                call.arguments == "{}"      -> com.google.gson.JsonObject()
+                call.arguments == "null"    -> com.google.gson.JsonObject()
+                else -> try {
+                    val parsed = JsonParser.parseString(call.arguments)
+                    if (parsed.isJsonObject) parsed.asJsonObject else com.google.gson.JsonObject()
+                } catch (_: Exception) { com.google.gson.JsonObject() }
             }
 
             val resultStr = when (call.name) {
