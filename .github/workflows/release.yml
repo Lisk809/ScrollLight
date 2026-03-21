@@ -37,14 +37,22 @@ jobs:
       - name: Grant execute permission
         run: chmod +x gradlew
         
-      - name: Wrapper
-        run: ./gradle wrapper --gradle-version 8.11.1
+      - name: Download gradle-wrapper.jar
+        run: |
+            mkdir -p gradle/wrapper
+            curl -fsSL \
+            "https://github.com/gradle/gradle/raw/v8.11.1/gradle/wrapper/gradle-wrapper.jar" \
+            -o gradle/wrapper/gradle-wrapper.jar
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+            gradle-version: wrapper   # ← 读 gradle-wrapper.properties 里的版本，无需手写版本号
 
       - name: Run lint (strict)
-        run: ./gradlew lint --stacktrace
+        run: gradlew lint --stacktrace
 
       - name: Run unit tests
-        run: ./gradlew testReleaseUnitTest --stacktrace
+        run: gradlew testReleaseUnitTest --stacktrace
 
       - name: Upload test results
         if: always()
@@ -101,7 +109,7 @@ jobs:
           KEY_ALIAS:         ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD:      ${{ secrets.KEY_PASSWORD }}
         run: |
-          ./gradlew assembleRelease \
+          gradlew assembleRelease \
             -Pandroid.versionName=${{ steps.version.outputs.version_name }} \
             -Pandroid.versionCode=${{ steps.version.outputs.version_code }} \
             --stacktrace
@@ -114,7 +122,7 @@ jobs:
           KEY_ALIAS:         ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD:      ${{ secrets.KEY_PASSWORD }}
         run: |
-          ./gradlew bundleRelease \
+          gradlew bundleRelease \
             -Pandroid.versionName=${{ steps.version.outputs.version_name }} \
             -Pandroid.versionCode=${{ steps.version.outputs.version_code }} \
             --stacktrace
