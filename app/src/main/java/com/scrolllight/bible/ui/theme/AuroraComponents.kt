@@ -1,5 +1,6 @@
 package com.scrolllight.bible.ui.theme
 
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*

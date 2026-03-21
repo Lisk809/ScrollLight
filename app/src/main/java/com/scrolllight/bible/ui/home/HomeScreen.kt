@@ -93,19 +93,14 @@ fun HomeScreen(
                             Row(horizontalArrangement = Arrangement.spacedBy(12.dp),
                                 verticalAlignment = Alignment.CenterVertically) {
                                 Box(
-                                    modifier = Modifier.size(42.dp)
-                                        .run {
-                                            val shape = RoundedCornerShape(12.dp)
-                                            this
-                                                .clip(shape)
-                                                .then(
-                                                    Modifier.background(
-                                                        androidx.compose.ui.graphics.Brush.radialGradient(
-                                                            listOf(colors.primary.copy(0.18f), colors.primary.copy(0.06f))
-                                                        )
-                                                    )
-                                                )
-                                        },
+                                    modifier = Modifier
+                                        .size(42.dp)
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(
+                                            androidx.compose.ui.graphics.Brush.radialGradient(
+                                                listOf(colors.primary.copy(alpha = 0.18f), colors.primary.copy(alpha = 0.06f))
+                                            )
+                                        ),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Icon(Icons.Outlined.AutoStories, null, tint = colors.primary,
