@@ -22,12 +22,12 @@ import javax.inject.Singleton
 // ── Sealed result types ───────────────────────────────────────────────────────
 
 sealed class StreamChunk {
-    data class Token(val text: String)              : StreamChunk()
-    data class ToolCallStart(val call: ToolCall)    : StreamChunk()
+    data class Token(val text: String)                     : StreamChunk()
+    data class ToolCallStart(val call: ToolCall)           : StreamChunk()
     data class ToolCallDelta(val id: String, val argDelta: String) : StreamChunk()
     data class ToolCallComplete(val calls: List<ToolCall>) : StreamChunk()
-    data class Done(val finishReason: String)       : StreamChunk()
-    data class Error(val message: String)           : StreamChunk()
+    data class Done(val finishReason: String)              : StreamChunk()
+    data class Error(val message: String)                  : StreamChunk()
 }
 
 // ── OpenAI-compatible message builder ────────────────────────────────────────
@@ -64,6 +64,10 @@ object MessageBuilder {
     }
 }
 
+// ── Model info ────────────────────────────────────────────────────────────────
+
+data class ModelInfo(val id: String, val owned: String, val created: Long)
+
 // ── API Client ────────────────────────────────────────────────────────────────
 
 @Singleton
@@ -84,19 +88,17 @@ class AiApiClient @Inject constructor(private val gson: Gson) {
         messages: JsonArray,
         stream: Boolean,
         withTools: Boolean = true
-    ): String {
-        return JsonObject().apply {
-            addProperty("model", config.model)
-            add("messages", messages)
-            addProperty("max_tokens", config.maxTokens)
-            addProperty("temperature", config.temperature.toDouble())
-            addProperty("stream", stream)
-            if (withTools) {
-                add("tools", ToolDefinitions.all)
-                addProperty("tool_choice", "auto")
-            }
-        }.toString()
-    }
+    ): String = JsonObject().apply {
+        addProperty("model", config.model)
+        add("messages", messages)
+        addProperty("max_tokens", config.maxTokens)
+        addProperty("temperature", config.temperature.toDouble())
+        addProperty("stream", stream)
+        if (withTools) {
+            add("tools", ToolDefinitions.all)
+            addProperty("tool_choice", "auto")
+        }
+    }.toString()
 
     // ── Streaming chat (SSE) ──────────────────────────────────────────────
 
@@ -109,15 +111,13 @@ class AiApiClient @Inject constructor(private val gson: Gson) {
             .post(body.toRequestBody(JSON))
             .build()
 
-        // Accumulate partial tool call arguments across deltas
-        val toolCallBuffers = mutableMapOf<Int, Triple<String, String, StringBuilder>>() // idx → (id, name, argBuf)
+        val toolCallBuffers = mutableMapOf<Int, Triple<String, String, StringBuilder>>()
 
         val factory = EventSources.createFactory(client)
-        val source = factory.newEventSource(request, object : EventSourceListener() {
+        val source  = factory.newEventSource(request, object : EventSourceListener() {
 
             override fun onEvent(eventSource: EventSource, id: String?, type: String?, data: String) {
                 if (data == "[DONE]") {
-                    // Flush any buffered tool calls
                     if (toolCallBuffers.isNotEmpty()) {
                         val calls = toolCallBuffers.values.map { (tcId, name, buf) ->
                             ToolCall(tcId, name, buf.toString().ifBlank { "{}" })
@@ -129,23 +129,21 @@ class AiApiClient @Inject constructor(private val gson: Gson) {
                     return
                 }
                 try {
-                    val json = JsonParser.parseString(data).asJsonObject
+                    val json   = JsonParser.parseString(data).asJsonObject
                     val choice = json.getAsJsonArray("choices")?.get(0)?.asJsonObject ?: return
                     val delta  = choice.getAsJsonObject("delta") ?: return
                     val finish = choice.get("finish_reason")?.takeIf { !it.isJsonNull }?.asString
 
-                    // Text token
                     delta.get("content")?.takeIf { !it.isJsonNull }?.asString?.let { token ->
                         if (token.isNotEmpty()) trySend(StreamChunk.Token(token))
                     }
 
-                    // Tool call deltas
                     delta.getAsJsonArray("tool_calls")?.forEach { tcElem ->
-                        val tc  = tcElem.asJsonObject
-                        val idx = tc.get("index")?.asInt ?: 0
-                        val tcId   = tc.get("id")?.takeIf { !it.isJsonNull }?.asString
-                        val fn     = tc.getAsJsonObject("function")
-                        val name   = fn?.get("name")?.takeIf { !it.isJsonNull }?.asString
+                        val tc    = tcElem.asJsonObject
+                        val idx   = tc.get("index")?.asInt ?: 0
+                        val tcId  = tc.get("id")?.takeIf { !it.isJsonNull }?.asString
+                        val fn    = tc.getAsJsonObject("function")
+                        val name  = fn?.get("name")?.takeIf { !it.isJsonNull }?.asString
                         val argsDelta = fn?.get("arguments")?.takeIf { !it.isJsonNull }?.asString ?: ""
 
                         if (tcId != null && name != null) {
@@ -174,9 +172,7 @@ class AiApiClient @Inject constructor(private val gson: Gson) {
                 close()
             }
 
-            override fun onClosed(eventSource: EventSource) {
-                close()
-            }
+            override fun onClosed(eventSource: EventSource) { close() }
         })
 
         awaitClose { source.cancel() }
@@ -198,7 +194,7 @@ class AiApiClient @Inject constructor(private val gson: Gson) {
                 emit(StreamChunk.Error("HTTP ${response.code}: ${response.message}"))
                 return@flow
             }
-            val json = JsonParser.parseString(response.body?.string() ?: "{}").asJsonObject
+            val json    = JsonParser.parseString(response.body?.string() ?: "{}").asJsonObject
             val choice  = json.getAsJsonArray("choices")?.get(0)?.asJsonObject
             val message = choice?.getAsJsonObject("message")
             val finish  = choice?.get("finish_reason")?.asString ?: "stop"
@@ -230,7 +226,6 @@ class AiApiClient @Inject constructor(private val gson: Gson) {
 
     fun send(config: AiConfig, messages: JsonArray): Flow<StreamChunk> =
         if (config.streamEnabled) streamChat(config, messages) else chat(config, messages)
-}
 
     // ── Fetch available models ────────────────────────────────────────────
 
@@ -263,5 +258,3 @@ class AiApiClient @Inject constructor(private val gson: Gson) {
         }
     }
 }
-
-data class ModelInfo(val id: String, val owned: String, val created: Long)
