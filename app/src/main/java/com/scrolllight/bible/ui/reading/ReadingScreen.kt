@@ -190,14 +190,14 @@ fun ReadingScreen(
                     if (word.morph.isNotBlank())
                         Text("形态：${word.morph}", style = MaterialTheme.typography.bodySmall,
                             color = colors.onSurfaceVariant)
-                    if (state.strongsEntry != null) {
-                        val strongs = state.strongsEntry
+                    state.strongsEntry?.let { strongs ->
                         HorizontalDivider()
                         Text(strongs.definition, style = MaterialTheme.typography.bodyMedium)
                         if (strongs.usage.isNotBlank())
                             Text(strongs.usage, style = MaterialTheme.typography.bodySmall,
                                 color = colors.onSurfaceVariant)
-                    } else if (word.gloss.isNotBlank()) {
+                    }
+                    if (state.strongsEntry == null && word.gloss.isNotBlank()) {
                         Text(word.gloss, style = MaterialTheme.typography.bodyMedium)
                     }
                 }
