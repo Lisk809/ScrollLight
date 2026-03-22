@@ -103,16 +103,13 @@ object SlBookParser {
                     "verses.jsonl" -> {
                         onProgress(0.10f, "导入经文…")
                         val versionId = metadata?.bookId ?: "unknown"
+                        // Collect all lines first (forEachLine is NOT a coroutine lambda)
                         zip.bufferedReader().forEachLine { line ->
                             if (line.isBlank()) return@forEachLine
                             val r = gson.fromJson(line, VerseRecord::class.java)
                             verseBatch.add(BibleVerseEntity(r.b, r.c, r.v, versionId, r.t, r.t2))
-                            if (verseBatch.size >= 500) {
-                                // flush batch
-                                verseBatch = verseBatch.also { db.verseDao().insertAll(it) }
-                                    .let { mutableListOf() }
-                            }
                         }
+                        // Insert outside the lambda where suspend is allowed
                         if (verseBatch.isNotEmpty()) {
                             db.verseDao().insertAll(verseBatch)
                             verseBatch = mutableListOf()
@@ -126,10 +123,6 @@ object SlBookParser {
                             if (line.isBlank()) return@forEachLine
                             val r = gson.fromJson(line, WordRecord::class.java)
                             wordBatch.add(OriginalWordEntity(r.b, r.c, r.v, r.i, versionId, r.s, r.l, r.st, r.m, r.tr, r.g))
-                            if (wordBatch.size >= 500) {
-                                wordBatch = wordBatch.also { db.originalWordDao().insertAll(it) }
-                                    .let { mutableListOf() }
-                            }
                         }
                         if (wordBatch.isNotEmpty()) {
                             db.originalWordDao().insertAll(wordBatch)
@@ -145,9 +138,6 @@ object SlBookParser {
                             val r = gson.fromJson(line, NoteRecord::class.java)
                             val noteType = try { NoteType.valueOf(r.type) } catch (_: Exception) { NoteType.VERSE_NOTE }
                             noteBatch.add(StudyNoteEntity(r.id, versionId, r.b, r.cf, r.vf, r.ct, r.vt, r.title, r.content, noteType, r.tags))
-                            if (noteBatch.size >= 200) {
-                                noteBatch = noteBatch.also { db.studyNoteDao().insertAll(it) }.let { mutableListOf() }
-                            }
                         }
                         if (noteBatch.isNotEmpty()) {
                             db.studyNoteDao().insertAll(noteBatch)
@@ -161,9 +151,6 @@ object SlBookParser {
                             if (line.isBlank()) return@forEachLine
                             val r = gson.fromJson(line, StrongsRecord::class.java)
                             strongsBatch.add(StrongsEntry(r.id, r.orig, r.tr, r.def, r.defEn, r.usage, r.lang))
-                            if (strongsBatch.size >= 500) {
-                                strongsBatch = strongsBatch.also { db.strongsDao().insertAll(it) }.let { mutableListOf() }
-                            }
                         }
                         if (strongsBatch.isNotEmpty()) {
                             db.strongsDao().insertAll(strongsBatch)

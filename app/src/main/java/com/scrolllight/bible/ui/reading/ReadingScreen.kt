@@ -196,8 +196,9 @@ fun ReadingScreen(
                         if (strongs.usage.isNotBlank())
                             Text(strongs.usage, style = MaterialTheme.typography.bodySmall,
                                 color = colors.onSurfaceVariant)
-                    } ?: if (word.gloss.isNotBlank()) {
-                        Text(word.gloss, style = MaterialTheme.typography.bodyMedium)
+                    ?: run {
+                        if (word.gloss.isNotBlank())
+                            Text(word.gloss, style = MaterialTheme.typography.bodyMedium)
                     }
                 }
             },
@@ -221,9 +222,10 @@ private fun ScrollReadingView(
     val isDark  = colors.background.luminance() < 0.15f
 
     // Merge verse sources: prefer library, fall back to built-in
+    val chapterNum = state.chapter
     val verses = state.versesLibrary.ifEmpty {
-        state.verses.map { v ->
-            BibleVerseEntity(state.book?.id ?: "", v.chapter, v.verse, "cuv", v.text)
+        state.verses.mapIndexed { _, v ->
+            BibleVerseEntity(state.book?.id ?: "", chapterNum, v.verse, "cuv", v.text)
         }
     }
 
@@ -325,10 +327,18 @@ private fun ScrollReadingView(
         // Chapter navigation
         item {
             Row(Modifier.fillMaxWidth().padding(16.dp), Arrangement.spacedBy(12.dp)) {
-                OutlinedButton(onClick = { vm.navigateChapter(-1) }, Modifier.weight(1f), RoundedCornerShape(14.dp)) {
+                OutlinedButton(
+                    onClick   = { vm.navigateChapter(-1) },
+                    modifier  = Modifier.weight(1f),
+                    shape     = RoundedCornerShape(14.dp)
+                ) {
                     Icon(Icons.Outlined.ChevronLeft, null); Spacer(Modifier.width(4.dp)); Text("上一章")
                 }
-                OutlinedButton(onClick = { vm.navigateChapter(1) }, Modifier.weight(1f), RoundedCornerShape(14.dp)) {
+                OutlinedButton(
+                    onClick   = { vm.navigateChapter(1) },
+                    modifier  = Modifier.weight(1f),
+                    shape     = RoundedCornerShape(14.dp)
+                ) {
                     Text("下一章"); Spacer(Modifier.width(4.dp)); Icon(Icons.Outlined.ChevronRight, null)
                 }
             }
@@ -344,9 +354,10 @@ private fun CardReadingView(
     vm: ReadingViewModel,
     modifier: Modifier = Modifier
 ) {
+    val chapterNum = state.chapter
     val verses = state.versesLibrary.ifEmpty {
-        state.verses.map { v ->
-            BibleVerseEntity(state.book?.id ?: "", v.chapter, v.verse, "cuv", v.text)
+        state.verses.mapIndexed { _, v ->
+            BibleVerseEntity(state.book?.id ?: "", chapterNum, v.verse, "cuv", v.text)
         }
     }
     var cardIndex by remember { mutableIntStateOf(0) }
