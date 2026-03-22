@@ -68,10 +68,16 @@ object ToolDefinitions {
         }
     }
 
-    /** 字符串 / 整数 属性 */
-    private fun prop(type: String, description: String, enum: List<String>? = null): JsonObject =
+    /** 字符串 / 整数 属性
+     *  nullable=true → type: ["string","null"]，允许模型传 null（Groq 等严格校验平台需要）
+     */
+    private fun prop(type: String, description: String, enum: List<String>? = null, nullable: Boolean = false): JsonObject =
         JsonObject().apply {
-            addProperty("type", type)
+            if (nullable) {
+                add("type", JsonArray().also { it.add(type); it.add("null") })
+            } else {
+                addProperty("type", type)
+            }
             addProperty("description", description)
             if (enum != null) add("enum", JsonArray().also { a -> enum.forEach { a.add(it) } })
         }
@@ -90,9 +96,9 @@ object ToolDefinitions {
         name        = NAVIGATE_TO_CHAPTER,
         description = "导航到指定的圣经书卷和章节。需要引导用户阅读特定经文时调用。",
         properties  = JsonObject().apply {
-            add("book_id",   prop("string",  "书卷ID，如 mat=马太福音, jhn=约翰福音, rom=罗马书, gen=创世记"))
-            add("chapter",   prop("integer", "章节数字，从1开始"))
-            add("book_name", prop("string",  "书卷中文名称，如马太福音"))
+            add("book_id", prop("string",  "书卷ID，如 mat=马太福音, jhn=约翰福音, rom=罗马书, gen=创世记"))
+            add("chapter", prop("integer", "章节数字，从1开始"))
+            // book_name 已移除：可选字段，避免 null 校验失败
         },
         required = listOf("book_id", "chapter")
     )
@@ -103,8 +109,9 @@ object ToolDefinitions {
         properties  = JsonObject().apply {
             add("verses", arrayProp("integer", "要高亮的节次列表，如 [3, 5, 7]"))
             add("color",  prop("string", "高亮颜色",
-                listOf("YELLOW", "GREEN", "BLUE", "PINK", "ORANGE", "PURPLE")))
-            add("reason", prop("string", "高亮原因，可选"))
+                listOf("YELLOW", "GREEN", "BLUE", "PINK", "ORANGE", "PURPLE"),
+                nullable = true))   // optional → ["string","null"] prevents Groq 400
+            // reason 字段已移除：可选字段若模型传 null 会导致严格接口（百炼等）400报错
         },
         required = listOf("verses")
     )
@@ -115,7 +122,8 @@ object ToolDefinitions {
         properties  = JsonObject().apply {
             add("query", prop("string", "搜索关键词，如爱、信心、以利亚"))
             add("scope", prop("string", "搜索范围",
-                listOf("WHOLE_BIBLE", "OLD_TESTAMENT", "NEW_TESTAMENT", "GOSPELS")))
+                listOf("WHOLE_BIBLE", "OLD_TESTAMENT", "NEW_TESTAMENT", "GOSPELS"),
+                nullable = true))
         },
         required = listOf("query")
     )
@@ -144,7 +152,7 @@ object ToolDefinitions {
         description = "显示交叉参考面板，列出相关经文引用。",
         properties  = JsonObject().apply {
             add("references", arrayProp("string", "交叉参考列表，如 [约 3:16, 罗 5:8]"))
-            add("title",      prop("string", "面板标题"))
+            // title 字段已移除：避免可选字段传 null 导致校验失败
         },
         required = listOf("references")
     )

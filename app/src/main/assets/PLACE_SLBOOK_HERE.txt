@@ -1,0 +1,7 @@
+将转换好的 .slbook 文件放在此目录。
+文件名示例：cuv.slbook
+
+转换方法：
+  node convert_bible.js 圣经.zip cuv.slbook cuv "圣经·和合本" "和合本"
+
+App 首次启动时会自动扫描此目录并安装所有 .slbook 文件。

@@ -25,6 +25,7 @@ import com.scrolllight.bible.ui.theme.*
 @Composable
 fun ProfileScreen(
     onNavigateToAiSettings: () -> Unit = {},
+    onNavigateToLibrary: () -> Unit = {},
     vm: ProfileViewModel = hiltViewModel(),
     themeVm: ThemeViewModel = hiltViewModel()
 ) {
@@ -154,7 +155,9 @@ fun ProfileScreen(
                         MenuItem(Icons.Outlined.ThumbUp,       "给好评")
                         MenuItem(Icons.Outlined.Share,         "推荐给朋友")
                         HorizontalDivider(Modifier.padding(horizontal = 16.dp), color = colors.outline.copy(0.2f))
-                        MenuItem(Icons.Outlined.AutoAwesome,   "AI 助读设置",  onClick = onNavigateToAiSettings)
+                        MenuItem(Icons.Outlined.LibraryBooks, "书库管理",
+                        onClick = onNavigateToLibrary)
+                    MenuItem(Icons.Outlined.AutoAwesome,   "AI 助读设置",  onClick = onNavigateToAiSettings)
                         MenuItem(Icons.Outlined.Settings,      "设置")
                     }
                 }

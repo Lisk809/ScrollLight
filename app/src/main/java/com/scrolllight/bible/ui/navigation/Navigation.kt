@@ -26,6 +26,7 @@ import com.scrolllight.bible.ui.profile.ProfileScreen
 import com.scrolllight.bible.ui.reading.BookContentsScreen
 import com.scrolllight.bible.ui.reading.ReadingScreen
 import com.scrolllight.bible.ui.reading.ReadingViewModel
+import com.scrolllight.bible.ui.library.LibraryScreen
 import com.scrolllight.bible.ui.search.SearchScreen
 import com.scrolllight.bible.ui.theme.glassBackground
 
@@ -38,6 +39,7 @@ sealed class Screen(val route: String) {
     object Profile      : Screen("profile")
     object BookContents : Screen("book_contents")
     object AiSettings   : Screen("ai_settings")
+    object Library      : Screen("library")
     object Reading      : Screen("reading/{bookId}/{chapter}") {
         fun createRoute(b: String, c: Int) = "reading/$b/$c"
     }
@@ -165,7 +167,8 @@ fun ScrollLightNavHost() {
                 }
                 composable(Screen.Profile.route) {
                     ProfileScreen(
-                        onNavigateToAiSettings = { navController.navigate(Screen.AiSettings.route) }
+                        onNavigateToAiSettings = { navController.navigate(Screen.AiSettings.route) },
+                        onNavigateToLibrary    = { navController.navigate(Screen.Library.route) }
                     )
                 }
                 composable(Screen.BookContents.route) {
@@ -208,6 +211,9 @@ fun ScrollLightNavHost() {
                 }
                 composable(Screen.AiSettings.route) {
                     AiSettingsScreen(onBack = { navController.popBackStack() })
+                }
+                composable(Screen.Library.route) {
+                    LibraryScreen(onBack = { navController.popBackStack() })
                 }
             }
         }
